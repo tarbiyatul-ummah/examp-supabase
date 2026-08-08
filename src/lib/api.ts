@@ -6,8 +6,8 @@ import type {
 import { clearSession, getSession, updateTokens } from "./session";
 import {
   isSupabaseConfigured,
-  SUPABASE_ANON_KEY,
   SUPABASE_FUNCTION_NAME,
+  SUPABASE_PUBLISHABLE_KEY,
   SUPABASE_URL,
 } from "./supabase";
 
@@ -25,6 +25,15 @@ export class ApiError extends Error {
 }
 
 let refreshRequest: Promise<boolean> | null = null;
+const controllerSessionId = (() => {
+  const storageKey = "ruanguji.controller-session-id";
+  const existing = sessionStorage.getItem(storageKey);
+  if (existing) return existing;
+  const created = crypto.randomUUID();
+  sessionStorage.setItem(storageKey, created);
+  return created;
+})();
+let clientSequence = 0;
 
 async function parseResponse<T>(response: Response): Promise<T> {
   if (response.status === 204) return undefined as T;
@@ -52,8 +61,7 @@ async function refreshSession(): Promise<boolean> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        apikey: SUPABASE_PUBLISHABLE_KEY,
       },
       body: JSON.stringify({ refreshToken: session.tokens.refreshToken }),
     });
@@ -73,21 +81,24 @@ export async function apiRequest<T>(
 ): Promise<T> {
   if (!isSupabaseConfigured) {
     throw new ApiError(
-      "Supabase belum dikonfigurasi. Isi VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY.",
+      "Supabase belum dikonfigurasi. Isi VITE_SUPABASE_URL dan VITE_SUPABASE_PUBLISHABLE_KEY.",
       0,
       "supabase_not_configured",
     );
   }
   const headers = new Headers(init.headers);
-  headers.set("apikey", SUPABASE_ANON_KEY);
+  headers.set("apikey", SUPABASE_PUBLISHABLE_KEY);
+  headers.set("X-Controller-Session-Id", controllerSessionId);
+  headers.set("X-Client-Seq", String(++clientSequence));
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
   const accessToken = getSession()?.tokens.accessToken;
-  headers.set(
-    "Authorization",
-    `Bearer ${authenticated && accessToken ? accessToken : SUPABASE_ANON_KEY}`,
-  );
+  if (authenticated && accessToken) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
+  } else {
+    headers.delete("Authorization");
+  }
   let response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
   if (authenticated && response.status === 401 && accessToken) {
     refreshRequest ??= refreshSession().finally(() => {

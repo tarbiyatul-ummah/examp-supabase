@@ -91,3 +91,29 @@ Tabel `attempts`, `answers`, `attempt_question_results`, dan `attempt_events` ma
 - `exports`: private, PDF maksimum 50 MiB. Unduhan diberikan melalui signed URL berumur pendek.
 
 Edge Function `ruanguji-api` memakai `verify_jwt = false` karena melayani route login dan route terautentikasi dalam satu gateway. Konsekuensinya, setiap route selain login wajib memvalidasi bearer token dan role secara eksplisit sebelum menjalankan operasi.
+
+## Menjalankan Edge Function
+
+Source gateway REST tersedia di `supabase/functions/ruanguji-api/index.ts`. Untuk lokal:
+
+```bash
+supabase functions serve ruanguji-api --env-file supabase/.env.local
+```
+
+Isi `supabase/.env.local` bila Supabase CLI tidak menyediakannya otomatis:
+
+```env
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_SECRET_KEY=sb_secret_...
+ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+```
+
+Untuk project remote, publishable dan secret key bawaan tersedia pada environment Edge Function. Tambahkan `ALLOWED_ORIGINS` melalui secrets lalu deploy:
+
+```bash
+supabase secrets set ALLOWED_ORIGINS=https://alamat-frontend.example
+supabase functions deploy ruanguji-api --no-verify-jwt
+```
+
+`SUPABASE_SECRET_KEY`/`SUPABASE_SECRET_KEYS` hanya digunakan di dalam Edge Function dan tidak boleh dikirim ke frontend.
