@@ -55,6 +55,17 @@ export type ApiQuestionOption = {
   isCorrect?: boolean;
 };
 
+export type ApiMediaAsset = {
+  bucketId: "question-media";
+  objectPath: string;
+  url?: string;
+  mimeType: string;
+  byteSize: number;
+  altText: string;
+  width?: number;
+  height?: number;
+};
+
 export type ApiQuestion = {
   id: string;
   examId: string;

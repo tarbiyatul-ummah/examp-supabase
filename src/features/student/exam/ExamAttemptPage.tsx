@@ -13,10 +13,14 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Brand } from "../../../components/ui";
-import type { ApiAttempt, ApiQuestion } from "../../../domain/api";
+import type {
+  ApiAttempt,
+  ApiMediaAsset,
+  ApiQuestion,
+} from "../../../domain/api";
 import { ApiError } from "../../../lib/api";
 import { examRepository } from "../../../repositories";
-import { documentText } from "../../../repositories/mappers";
+import { documentImage, documentText } from "../../../repositories/mappers";
 import { ConnectionOverlay } from "./ConnectionOverlay";
 import { SubmitExamModal } from "./SubmitExamModal";
 
@@ -25,6 +29,7 @@ type AttemptQuestion = {
   type: "Pilihan ganda" | "Isian angka" | "Isian pendek" | "Isian panjang";
   weight: number;
   prompt: string;
+  image?: ApiMediaAsset;
   options: Array<{ id: string; text: string }>;
 };
 type LocalAnswer = {
@@ -51,6 +56,7 @@ function toQuestions(attempt: ApiAttempt): AttemptQuestion[] {
           type: questionTypes[item.question.type],
           weight: item.question.weight,
           prompt: documentText(item.question.contentDoc),
+          image: documentImage(item.question.contentDoc),
           options: (item.question.options || []).map((option) => ({
             id: option.id,
             text: documentText(option.contentDoc),
@@ -305,6 +311,11 @@ export function ExamAttemptPage() {
             <strong>{question.weight} POIN</strong>
           </div>
           <h1>{question.prompt}</h1>
+          {question.image?.url && (
+            <figure className="question-content-media">
+              <img src={question.image.url} alt={question.image.altText} />
+            </figure>
+          )}
           {question.type === "Pilihan ganda" ? (
             <div className="answer-options">
               {question.options.map((option, index) => (

@@ -3,6 +3,13 @@ import { createClient } from "npm:@supabase/supabase-js@2.112.2";
 
 type Role = "student" | "admin" | "super_admin";
 
+const MAX_QUESTION_IMAGE_BYTES = 2.5 * 1024 * 1024;
+const QUESTION_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
 class HttpError extends Error {
   constructor(
     readonly status: number,
@@ -290,6 +297,43 @@ function mapQuestion(
   };
 }
 
+async function signContentMedia(
+  value: unknown,
+  expiresIn: number,
+): Promise<unknown> {
+  if (Array.isArray(value)) {
+    return await Promise.all(
+      value.map((item) => signContentMedia(item, expiresIn)),
+    );
+  }
+  if (!value || typeof value !== "object") return value;
+  const node = value as Record<string, unknown>;
+  const attrs = node.attrs;
+  if (
+    node.type === "image" &&
+    attrs &&
+    typeof attrs === "object" &&
+    typeof (attrs as Record<string, unknown>).objectPath === "string"
+  ) {
+    const objectPath = (attrs as Record<string, unknown>).objectPath as string;
+    const { data, error } = await service.storage
+      .from("question-media")
+      .createSignedUrl(objectPath, expiresIn);
+    if (error || !data?.signedUrl) failFromDb(error);
+    return {
+      ...node,
+      attrs: { ...(attrs as Record<string, unknown>), url: data.signedUrl },
+    };
+  }
+  const entries = await Promise.all(
+    Object.entries(node).map(async ([key, child]) => [
+      key,
+      await signContentMedia(child, expiresIn),
+    ]),
+  );
+  return Object.fromEntries(entries);
+}
+
 function mapAnswer(
   row: any,
   result?: any,
@@ -487,18 +531,32 @@ async function attemptSnapshot(
       .select("*")
       .eq("attempt_id", attemptId),
   );
-  const mappedQuestions = attemptQuestions.map((item) => {
+  const signedUrlLifetime = Math.max(
+    3600,
+    Number(attempt.duration_seconds) - Number(attempt.active_elapsed_seconds) +
+      3600,
+  );
+  const mappedQuestions = await Promise.all(attemptQuestions.map(async (item) => {
     const question = questions.find(
       (candidate) => candidate.id === item.question_id,
     );
     const optionOrder = item.option_order ?? [];
-    const questionOptions = options
+    const orderedOptions = options
       .filter((option) => option.question_id === item.question_id)
       .sort((a, b) => {
         const ai = optionOrder.indexOf(a.id);
         const bi = optionOrder.indexOf(b.id);
         return (ai < 0 ? a.position : ai) - (bi < 0 ? b.position : bi);
       });
+    const questionOptions = await Promise.all(
+      orderedOptions.map(async (option) => ({
+        ...option,
+        content_doc: await signContentMedia(
+          option.content_doc,
+          signedUrlLifetime,
+        ),
+      })),
+    );
     const key = keys.find(
       (candidate) => candidate.question_id === item.question_id,
     );
@@ -507,13 +565,19 @@ async function attemptSnapshot(
       displayOrder: item.display_order,
       optionOrder,
       question: mapQuestion(
-        question,
+        {
+          ...question,
+          content_doc: await signContentMedia(
+            question?.content_doc,
+            signedUrlLifetime,
+          ),
+        },
         assignment.exam_id,
         questionOptions,
         key?.correct_option_id,
       ),
     };
-  });
+  }));
   const mappedAnswers = includeUnanswered
     ? attemptQuestions.map((item) =>
         mapAnswer(
@@ -1006,6 +1070,105 @@ async function handle(request: Request) {
   }
 
   match = path.match(/^\/v1\/admin\/exams\/([^/]+)\/questions$/);
+  const mediaMatch = path.match(/^\/v1\/admin\/exams\/([^/]+)\/media$/);
+  if (mediaMatch && method === "POST") {
+    const auth = await actor(request, ["admin", "super_admin"]);
+    const draft = dataOrThrow<any>(
+      await auth.client
+        .from("exam_versions")
+        .select("id")
+        .eq("exam_id", mediaMatch[1])
+        .eq("status", "draft")
+        .single(),
+    );
+    const form = await request.formData();
+    const file = form.get("file");
+    if (!(file instanceof File)) {
+      throw new HttpError(
+        400,
+        "image_required",
+        "Pilih gambar yang akan diunggah.",
+      );
+    }
+    if (file.size > MAX_QUESTION_IMAGE_BYTES) {
+      throw new HttpError(
+        413,
+        "image_too_large",
+        "Gambar tidak boleh lebih dari 2,5 MB.",
+      );
+    }
+    if (!QUESTION_IMAGE_TYPES.has(file.type)) {
+      throw new HttpError(
+        415,
+        "unsupported_image_type",
+        "Format gambar harus JPG, PNG, atau WebP.",
+      );
+    }
+    const altText = String(form.get("altText") ?? "").trim();
+    if (!altText || altText.length > 500) {
+      throw new HttpError(
+        400,
+        "invalid_alt_text",
+        "Teks alternatif gambar wajib diisi dan maksimal 500 karakter.",
+      );
+    }
+    const widthValue = Number(form.get("width") ?? 0);
+    const heightValue = Number(form.get("height") ?? 0);
+    const width = Number.isInteger(widthValue) && widthValue > 0
+      ? widthValue
+      : null;
+    const height = Number.isInteger(heightValue) && heightValue > 0
+      ? heightValue
+      : null;
+    const extension: Record<string, string> = {
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+    };
+    const objectPath = `${draft.id}/${crypto.randomUUID()}.${extension[file.type]}`;
+    const { error: uploadError } = await service.storage
+      .from("question-media")
+      .upload(objectPath, file, {
+        contentType: file.type,
+        cacheControl: "3600",
+        upsert: false,
+      });
+    if (uploadError) failFromDb(uploadError);
+
+    const { data: asset, error: assetError } = await auth.client
+      .from("media_assets")
+      .insert({
+        exam_version_id: draft.id,
+        bucket_id: "question-media",
+        object_path: objectPath,
+        mime_type: file.type,
+        byte_size: file.size,
+        alt_text: altText,
+        width,
+        height,
+        uploaded_by: auth.user.id,
+      })
+      .select("*")
+      .single();
+    if (assetError || !asset) {
+      await service.storage.from("question-media").remove([objectPath]);
+      failFromDb(assetError);
+    }
+    return json(
+      request,
+      {
+        bucketId: asset.bucket_id,
+        objectPath: asset.object_path,
+        mimeType: asset.mime_type,
+        byteSize: Number(asset.byte_size),
+        altText: asset.alt_text,
+        width: asset.width ?? undefined,
+        height: asset.height ?? undefined,
+      },
+      201,
+    );
+  }
+
   if (match && method === "POST") {
     const auth = await actor(request, ["admin", "super_admin"]);
     const input = await body(request);

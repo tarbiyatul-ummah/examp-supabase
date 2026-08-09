@@ -2,6 +2,7 @@ import type {
   ApiAnswer,
   ApiAttempt,
   ApiExam,
+  ApiMediaAsset,
   ApiMonitoringRow,
   ApiQuestion,
   ApiReviewQueueRow,
@@ -40,6 +41,22 @@ export const examRepository = {
       { method: "POST", body: JSON.stringify(input) },
     );
     return mapQuestion(data);
+  },
+  async uploadQuestionImage(
+    examId: string,
+    file: File,
+    input: { altText: string; width?: number; height?: number },
+  ) {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("altText", input.altText);
+    if (input.width) form.append("width", String(input.width));
+    if (input.height) form.append("height", String(input.height));
+    const { data } = await envelope<ApiMediaAsset>(
+      `/v1/admin/exams/${examId}/media`,
+      { method: "POST", body: form },
+    );
+    return data;
   },
   async publish(examId: string) {
     const { data } = await envelope<ApiExam>(

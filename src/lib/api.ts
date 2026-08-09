@@ -90,7 +90,11 @@ export async function apiRequest<T>(
   headers.set("apikey", SUPABASE_PUBLISHABLE_KEY);
   headers.set("X-Controller-Session-Id", controllerSessionId);
   headers.set("X-Client-Seq", String(++clientSequence));
-  if (init.body && !headers.has("Content-Type")) {
+  if (
+    init.body &&
+    !(init.body instanceof FormData) &&
+    !headers.has("Content-Type")
+  ) {
     headers.set("Content-Type", "application/json");
   }
   const accessToken = getSession()?.tokens.accessToken;

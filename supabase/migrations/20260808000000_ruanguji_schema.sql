@@ -246,7 +246,7 @@ create table public.media_assets (
   bucket_id text not null default 'question-media',
   object_path text not null unique,
   mime_type text not null check (mime_type in ('image/jpeg', 'image/png', 'image/webp')),
-  byte_size bigint not null check (byte_size > 0 and byte_size <= 10485760),
+  byte_size bigint not null check (byte_size > 0 and byte_size <= 2621440),
   alt_text text not null check (length(btrim(alt_text)) between 1 and 500),
   width integer check (width is null or width > 0),
   height integer check (height is null or height > 0),

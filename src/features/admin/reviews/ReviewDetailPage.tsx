@@ -7,7 +7,7 @@ import type { Toast } from "../../../components/ui";
 import type { ApiAnswer, ApiAttempt } from "../../../domain/api";
 import { ApiError } from "../../../lib/api";
 import { examRepository } from "../../../repositories";
-import { documentText } from "../../../repositories/mappers";
+import { documentImage, documentText } from "../../../repositories/mappers";
 
 export function ReviewDetailPage() {
   const { id } = useParams();
@@ -88,6 +88,7 @@ export function ReviewDetailPage() {
               const question = questions.get(answer.questionId);
               const options = question?.options || [];
               const selected = options.find((option) => option.id === answer.selectedOptionId);
+              const questionImage = question ? documentImage(question.contentDoc) : undefined;
               return (
                 <article className={`answer-review-card ${answer.verdict === "incorrect" ? "wrong" : answer.verdict || ""}`} key={answer.id}>
                   <div className="answer-card-title">
@@ -96,6 +97,11 @@ export function ReviewDetailPage() {
                     {answer.verdict && <StatusPill tone={answer.verdict === "correct" ? "terbit" : "danger"}>{answer.verdict === "correct" ? "Benar" : "Salah"}</StatusPill>}
                   </div>
                   <h3>{question ? documentText(question.contentDoc) : "Pertanyaan"}</h3>
+                  {questionImage?.url && (
+                    <figure className="question-content-media review-question-media">
+                      <img src={questionImage.url} alt={questionImage.altText} />
+                    </figure>
+                  )}
                   <div className="student-answer"><label>Jawaban peserta</label><p>{answer.textRaw || (selected ? documentText(selected.contentDoc) : "Tidak dijawab")}</p></div>
                   <div className="verdict-buttons">
                     <span>Berikan penilaian:</span>

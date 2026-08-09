@@ -87,7 +87,7 @@ Tabel `attempts`, `answers`, `attempt_question_results`, dan `attempt_events` ma
 
 ## Storage
 
-- `question-media`: private, JPG/PNG/WebP maksimum 10 MiB. Path objek harus dicatat di `media_assets`.
+- `question-media`: private, JPG/PNG/WebP maksimum 2,5 MiB. Path objek harus dicatat di `media_assets`.
 - `exports`: private, PDF maksimum 50 MiB. Unduhan diberikan melalui signed URL berumur pendek.
 
 Edge Function `ruanguji-api` memakai `verify_jwt = false` karena melayani route login dan route terautentikasi dalam satu gateway. Konsekuensinya, setiap route selain login wajib memvalidasi bearer token dan role secara eksplisit sebelum menjalankan operasi.

@@ -2,16 +2,24 @@ import {
   ArrowRight,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ClipboardCheck,
   FileText,
+  ImagePlus,
   Plus,
   Send,
   Sparkles,
   Trash2,
   Users,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ChangeEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AdminShell } from "../../../components/layout";
 import { Avatar, Toast, ToastMessage } from "../../../components/ui";
@@ -23,9 +31,20 @@ import type {
 } from "../../../domain/models";
 import { ApiError } from "../../../lib/api";
 import { examRepository, studentRepository } from "../../../repositories";
-import { documentText, textDocument } from "../../../repositories/mappers";
+import {
+  documentText,
+  questionDocument,
+  textDocument,
+} from "../../../repositories/mappers";
 
 type Mode = "instant" | "manual";
+type DraftImage = {
+  file: File;
+  previewUrl: string;
+  altText: string;
+  width?: number;
+  height?: number;
+};
 type DraftQuestion = {
   clientId: string;
   type: QuestionType;
@@ -34,7 +53,25 @@ type DraftQuestion = {
   correct: number;
   acceptedAnswer: string;
   weight: number;
+  image?: DraftImage;
 };
+
+const MAX_QUESTION_IMAGE_BYTES = 2.5 * 1024 * 1024;
+const ALLOWED_QUESTION_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+];
+
+function readImageSize(url: string) {
+  return new Promise<{ width: number; height: number }>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () =>
+      resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onerror = () => reject(new Error("Gambar tidak dapat dibaca."));
+    image.src = url;
+  });
+}
 
 const gradesForLevel: Record<AcademicLevel, number[]> = {
   SD: [1, 2, 3, 4, 5, 6],
@@ -68,6 +105,7 @@ export function ExamEditorPage() {
   const [duration, setDuration] = useState(45);
   const [level, setLevel] = useState<AcademicLevel>("SMP");
   const [grades, setGrades] = useState<number[]>([8]);
+  const [gradeMenuOpen, setGradeMenuOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("instant");
   const [questions, setQuestions] = useState<DraftQuestion[]>([newQuestion()]);
   const [activeId, setActiveId] = useState(questions[0].clientId);
@@ -75,6 +113,15 @@ export function ExamEditorPage() {
   const [selected, setSelected] = useState<EntityId[]>([]);
   const [serverExamId, setServerExamId] = useState(id || "");
   const uploaded = useRef(new Set<string>());
+  const uploadedMedia = useRef(
+    new Map<
+      string,
+      Awaited<ReturnType<typeof examRepository.uploadQuestionImage>>
+    >(),
+  );
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const previewUrls = useRef(new Set<string>());
+  const gradeMenuRef = useRef<HTMLDivElement>(null);
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
   const [error, setError] = useState("");
@@ -96,6 +143,23 @@ export function ExamEditorPage() {
   }, []);
 
   useEffect(() => {
+    if (!gradeMenuOpen) return;
+    const closeOutside = (event: MouseEvent) => {
+      if (!gradeMenuRef.current?.contains(event.target as Node))
+        setGradeMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setGradeMenuOpen(false);
+    };
+    document.addEventListener("mousedown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [gradeMenuOpen]);
+
+  useEffect(() => {
     if (!id) return;
     examRepository.listRaw().then((items) => {
       const exam = items.find((item) => item.id === id);
@@ -114,6 +178,14 @@ export function ExamEditorPage() {
     });
   }, [id]);
 
+  useEffect(
+    () => () => {
+      previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+      previewUrls.current.clear();
+    },
+    [],
+  );
+
   const updateActive = (changes: Partial<DraftQuestion>) => {
     setQuestions((items) =>
       items.map((item) =>
@@ -128,10 +200,58 @@ export function ExamEditorPage() {
     setActiveId(question.clientId);
   };
 
+  const removeQuestionImage = () => {
+    if (active.image) {
+      URL.revokeObjectURL(active.image.previewUrl);
+      previewUrls.current.delete(active.image.previewUrl);
+    }
+    uploadedMedia.current.delete(active.clientId);
+    updateActive({ image: undefined });
+  };
+
+  const selectQuestionImage = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+    if (!ALLOWED_QUESTION_IMAGE_TYPES.includes(file.type)) {
+      setToast({ message: "Format gambar harus JPG, PNG, atau WebP." });
+      return;
+    }
+    if (file.size > MAX_QUESTION_IMAGE_BYTES) {
+      setToast({ message: "Gambar tidak boleh lebih dari 2,5 MB." });
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    try {
+      const size = await readImageSize(previewUrl);
+      if (active.image) {
+        URL.revokeObjectURL(active.image.previewUrl);
+        previewUrls.current.delete(active.image.previewUrl);
+      }
+      previewUrls.current.add(previewUrl);
+      uploadedMedia.current.delete(active.clientId);
+      updateActive({
+        image: {
+          file,
+          previewUrl,
+          altText: file.name.replace(/\.[^.]+$/, ""),
+          ...size,
+        },
+      });
+    } catch {
+      URL.revokeObjectURL(previewUrl);
+      setToast({ message: "Gambar tidak dapat dibaca. Pilih file lain." });
+    }
+  };
+
   const changeLevel = (nextLevel: AcademicLevel) => {
     setLevel(nextLevel);
     setGrades([gradesForLevel[nextLevel][0]]);
     setSelected([]);
+    setGradeMenuOpen(false);
   };
 
   const toggleGrade = (grade: number) => {
@@ -166,6 +286,8 @@ export function ExamEditorPage() {
         return `Pertanyaan soal ${index + 1} belum diisi.`;
       if (question.weight <= 0)
         return `Bobot soal ${index + 1} harus lebih dari nol.`;
+      if (question.image && !question.image.altText.trim())
+        return `Teks alternatif gambar soal ${index + 1} wajib diisi.`;
       if (
         question.type === "Pilihan ganda" &&
         (question.options.length < 2 ||
@@ -242,9 +364,22 @@ export function ExamEditorPage() {
 
       for (const [index, question] of questions.entries()) {
         if (uploaded.current.has(question.clientId)) continue;
+        let media = uploadedMedia.current.get(question.clientId);
+        if (question.image && !media) {
+          media = await examRepository.uploadQuestionImage(
+            examId,
+            question.image.file,
+            {
+              altText: question.image.altText.trim(),
+              width: question.image.width,
+              height: question.image.height,
+            },
+          );
+          uploadedMedia.current.set(question.clientId, media);
+        }
         await examRepository.addQuestion(examId, {
           type: typeMap[question.type],
-          contentDoc: textDocument(question.prompt),
+          contentDoc: questionDocument(question.prompt, media),
           weight: question.weight,
           position: index + 1,
           shuffleOptions: question.type === "Pilihan ganda",
@@ -368,24 +503,28 @@ export function ExamEditorPage() {
               </div>
               <div>
                 <label>Kelas target</label>
-                <div
-                  className="grade-picker"
-                  role="group"
-                  aria-label="Pilih kelas target"
-                >
-                  {availableGrades.map((grade) => (
-                    <label
-                      className={grades.includes(grade) ? "selected" : ""}
-                      key={grade}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={grades.includes(grade)}
-                        onChange={() => toggleGrade(grade)}
-                      />
-                      <span>{grade}</span>
-                    </label>
-                  ))}
+                <div className="grade-multiselect" ref={gradeMenuRef}>
+                  <button
+                    type="button"
+                    className={`grade-multiselect-trigger ${gradeMenuOpen ? "open" : ""} ${!grades.length ? "invalid" : ""}`}
+                    aria-haspopup="true"
+                    aria-expanded={gradeMenuOpen}
+                    onClick={() => setGradeMenuOpen((open) => !open)}
+                  >
+                    <span>{grades.length ? `Kelas ${grades.join(", ")}` : "Pilih kelas"}</span>
+                    <ChevronDown />
+                  </button>
+                  {gradeMenuOpen && (
+                    <div className="grade-multiselect-menu" role="group" aria-label="Pilih kelas target">
+                      <div className="grade-multiselect-head"><strong>Pilih kelas</strong><small>{grades.length} dipilih</small></div>
+                      {availableGrades.map((grade) => (
+                        <label className="grade-multiselect-option" key={grade}>
+                          <input type="checkbox" checked={grades.includes(grade)} onChange={() => toggleGrade(grade)} />
+                          <span>Kelas {grade}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <small
                   className={`grade-helper ${grades.length ? "" : "error"}`}
@@ -510,6 +649,11 @@ export function ExamEditorPage() {
                     className="icon-button destructive"
                     onClick={() => {
                       if (questions.length === 1) return;
+                      if (active.image) {
+                        URL.revokeObjectURL(active.image.previewUrl);
+                        previewUrls.current.delete(active.image.previewUrl);
+                      }
+                      uploadedMedia.current.delete(active.clientId);
                       const next = questions.filter(
                         (item) => item.clientId !== active.clientId,
                       );
@@ -522,14 +666,81 @@ export function ExamEditorPage() {
                 </div>
               </div>
 
-              <textarea
-                className="question-prompt-input"
-                value={active.prompt}
-                onChange={(event) =>
-                  updateActive({ prompt: event.target.value })
-                }
-                placeholder="Tulis pertanyaan di sini..."
-              />
+              <div className="question-content-editor">
+                <div className="question-content-toolbar">
+                  <div>
+                    <strong>Isi soal</strong>
+                    <small>Teks dan gambar akan tampil sesuai preview.</small>
+                  </div>
+                  <button
+                    type="button"
+                    className="button secondary question-image-button"
+                    onClick={() => imageInputRef.current?.click()}
+                  >
+                    <ImagePlus />
+                    {active.image ? "Ganti gambar" : "Sisipkan gambar"}
+                  </button>
+                  <input
+                    ref={imageInputRef}
+                    className="visually-hidden"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(event) => void selectQuestionImage(event)}
+                  />
+                </div>
+                <textarea
+                  className="question-prompt-input"
+                  value={active.prompt}
+                  onChange={(event) =>
+                    updateActive({ prompt: event.target.value })
+                  }
+                  placeholder="Tulis pertanyaan di sini..."
+                />
+                {active.image && (
+                  <div className="question-image-editor">
+                    <img
+                      src={active.image.previewUrl}
+                      alt={active.image.altText || "Preview gambar soal"}
+                    />
+                    <div className="question-image-details">
+                      <label htmlFor={`question-image-alt-${active.clientId}`}>
+                        Teks alternatif gambar
+                      </label>
+                      <input
+                        id={`question-image-alt-${active.clientId}`}
+                        maxLength={500}
+                        value={active.image.altText}
+                        onChange={(event) =>
+                          updateActive({
+                            image: {
+                              ...active.image!,
+                              altText: event.target.value,
+                            },
+                          })
+                        }
+                        placeholder="Jelaskan isi gambar"
+                      />
+                      <small>
+                        {(active.image.file.size / 1024 / 1024).toFixed(2)} MB
+                        {active.image.width && active.image.height
+                          ? ` · ${active.image.width} × ${active.image.height} px`
+                          : ""}
+                      </small>
+                    </div>
+                    <button
+                      type="button"
+                      className="icon-button destructive"
+                      aria-label="Hapus gambar soal"
+                      onClick={removeQuestionImage}
+                    >
+                      <Trash2 />
+                    </button>
+                  </div>
+                )}
+                <small className="question-image-hint">
+                  JPG, PNG, atau WebP · maksimal 2,5 MB.
+                </small>
+              </div>
 
               {active.type === "Pilihan ganda" ? (
                 <div className="option-editor">

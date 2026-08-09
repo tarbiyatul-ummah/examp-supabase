@@ -232,7 +232,7 @@ using (public.is_super_admin()) with check (public.is_super_admin() and updated_
 -- Storage buckets are private; signed URLs should be used for exports.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values
-  ('question-media', 'question-media', false, 10485760, array['image/jpeg','image/png','image/webp']),
+  ('question-media', 'question-media', false, 2621440, array['image/jpeg','image/png','image/webp']),
   ('exports', 'exports', false, 52428800, array['application/pdf'])
 on conflict (id) do update set
   public = excluded.public,

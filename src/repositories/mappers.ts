@@ -1,4 +1,9 @@
-import type { ApiExam, ApiQuestion, ApiStudent } from "../domain/api";
+import type {
+  ApiExam,
+  ApiMediaAsset,
+  ApiQuestion,
+  ApiStudent,
+} from "../domain/api";
 import type { Exam, Question, Student } from "../domain/models";
 
 const colors = ["#7b61d1", "#e9764a", "#19877a", "#d39b22"];
@@ -24,6 +29,60 @@ export function textDocument(text: string): Record<string, unknown> {
         ]
       : [],
   };
+}
+
+export function questionDocument(
+  text: string,
+  image?: ApiMediaAsset,
+): Record<string, unknown> {
+  const document = textDocument(text);
+  if (!image) return document;
+  return {
+    ...document,
+    content: [
+      ...((document.content as unknown[]) || []),
+      {
+        type: "image",
+        attrs: {
+          bucketId: image.bucketId,
+          objectPath: image.objectPath,
+          mimeType: image.mimeType,
+          byteSize: image.byteSize,
+          altText: image.altText,
+          ...(image.width ? { width: image.width } : {}),
+          ...(image.height ? { height: image.height } : {}),
+        },
+      },
+    ],
+  };
+}
+
+export function documentImage(value: unknown): ApiMediaAsset | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const node = value as Record<string, unknown>;
+  if (node.type === "image" && node.attrs && typeof node.attrs === "object") {
+    const attrs = node.attrs as Record<string, unknown>;
+    if (typeof attrs.objectPath !== "string") return undefined;
+    return {
+      bucketId: "question-media",
+      objectPath: attrs.objectPath,
+      url: typeof attrs.url === "string" ? attrs.url : undefined,
+      mimeType:
+        typeof attrs.mimeType === "string" ? attrs.mimeType : "image/jpeg",
+      byteSize: Number(attrs.byteSize || 0),
+      altText:
+        typeof attrs.altText === "string" ? attrs.altText : "Gambar soal",
+      width: typeof attrs.width === "number" ? attrs.width : undefined,
+      height: typeof attrs.height === "number" ? attrs.height : undefined,
+    };
+  }
+  if (Array.isArray(node.content)) {
+    for (const child of node.content) {
+      const image = documentImage(child);
+      if (image) return image;
+    }
+  }
+  return undefined;
 }
 
 function phaseFor(level: ApiExam["targetLevel"], grades: number[]) {
