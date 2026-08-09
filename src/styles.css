@@ -4600,6 +4600,73 @@ td strong {
   font-size: 12pt;
   font-weight: 700;
 }
+.student-home-tabs {
+  width: 100%;
+  margin-top: 28px;
+  padding: 6px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  border: 1px solid #dfe8e6;
+  border-radius: 14px;
+  background: #f2f7f6;
+}
+.student-home-tabs > button {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #617572;
+  background: transparent;
+  font-weight: 750;
+  text-align: left;
+}
+.student-home-tabs > button:hover {
+  color: var(--teal);
+  background: rgba(255, 255, 255, 0.65);
+}
+.student-home-tabs > button.active {
+  color: var(--teal);
+  border-color: #d7e5e2;
+  background: white;
+  box-shadow: 0 5px 14px rgba(30, 67, 62, 0.08);
+}
+.student-home-tabs svg {
+  width: 18px;
+  flex: 0 0 auto;
+}
+.student-home-tabs strong {
+  min-width: 27px;
+  margin-left: auto;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: inherit;
+  background: #e4efed;
+  font-size: 11pt;
+  text-align: center;
+}
+.student-home-tabs .active strong {
+  background: #dff1ee;
+}
+.student-tab-panel,
+.student-tab-state,
+.student-tab-empty {
+  width: 100%;
+}
+.student-tab-panel .student-section-title {
+  margin-top: 20px;
+}
+.student-tab-state {
+  margin-top: 18px;
+}
+.student-tab-empty {
+  margin-top: 14px;
+}
 .student-exam-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4845,6 +4912,9 @@ td strong {
 }
 .student-history-section .student-section-title {
   align-items: center;
+}
+.student-history-section .past-exams {
+  margin-top: 0;
 }
 .past-exam-row > a svg {
   width: 15px;

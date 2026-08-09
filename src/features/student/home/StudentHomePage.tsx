@@ -29,6 +29,7 @@ export function StudentHomePage() {
   const [history, setHistory] = useState<ApiAttemptHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState<"exams" | "history">("exams");
   useEffect(() => {
     Promise.all([
       examRepository.studentExams(),
@@ -56,126 +57,163 @@ export function StudentHomePage() {
             <i>★</i>
           </div>
         </section>
-        <div className="student-section-title">
-          <div>
-            <h2>Ujianmu</h2>
-            <p>Pilih ujian untuk melihat detail dan mulai mengerjakan.</p>
-          </div>
-          <span>{exams.length} ujian</span>
+        <div className="student-home-tabs" role="tablist" aria-label="Konten peserta">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "exams"}
+            className={activeTab === "exams" ? "active" : ""}
+            onClick={() => setActiveTab("exams")}
+          >
+            <FileText />
+            <span>Ujianmu</span>
+            <strong>{exams.length}</strong>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "history"}
+            className={activeTab === "history" ? "active" : ""}
+            onClick={() => setActiveTab("history")}
+          >
+            <History />
+            <span>Histori ujian</span>
+            <strong>{history.length}</strong>
+          </button>
         </div>
+
         {loading && (
-          <section className="panel">
-            <p>Memuat ujianmu...</p>
+          <section className="panel student-tab-state">
+            <p>Memuat data ujian...</p>
           </section>
         )}
         {error && (
-          <section className="panel">
+          <section className="panel student-tab-state">
             <p>{error}</p>
           </section>
         )}
-        <div className="student-exam-grid">
-          {exams.map((exam) => {
-            const manual = exam.mode === "Koreksi admin";
-            return (
-              <article className="student-exam-card" key={exam.id}>
-                <div
-                  className={`student-exam-cover ${manual ? "orange-cover" : "purple-cover"}`}
-                >
-                  <span className="date-badge">
-                    <CalendarDays /> Tersedia sekarang
-                  </span>
-                  <div className="cover-symbol" aria-hidden="true">
-                    {manual ? <FileText /> : <Sigma />}
-                  </div>
-                  <div className="cover-dots" aria-hidden="true">
-                    {manual ? (
-                      <Quote />
-                    ) : (
-                      <>
-                        <Divide />
-                        <X />
-                        <Plus />
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div className="student-exam-body">
-                  <p>{exam.subject.toUpperCase()}</p>
-                  <h3>{exam.shortTitle}</h3>
-                  <div className="student-exam-meta">
-                    <span>
-                      <Clock3 />
-                      {exam.duration} menit
-                    </span>
-                    <span>
-                      <ListChecks />
-                      {exam.questions} soal
-                    </span>
-                  </div>
-                  {manual && (
-                    <div className="mode-student-note">
-                      <ClipboardCheck />
-                      <span>
-                        <strong>{exam.mode}</strong>
-                        <small>Nilai tampil setelah diperiksa</small>
-                      </span>
-                    </div>
-                  )}
-                  <Link
-                    to={`/student/exam/${exam.id}`}
-                    className="button secondary full"
-                  >
-                    Lihat detail <ArrowRight />
-                  </Link>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-        {!loading && !error && exams.length === 0 && (
-          <section className="panel">
-            <p>Belum ada ujian yang ditugaskan untukmu.</p>
-          </section>
-        )}
-        {!loading && !error && history.length > 0 && (
-          <section className="student-history-section">
+
+        {!loading && !error && activeTab === "exams" && (
+          <section className="student-tab-panel" role="tabpanel">
             <div className="student-section-title">
               <div>
-                <h2>Histori pengerjaan</h2>
+                <h2>Ujianmu</h2>
+                <p>Pilih ujian untuk melihat detail dan mulai mengerjakan.</p>
+              </div>
+              <span>{exams.length} ujian</span>
+            </div>
+            <div className="student-exam-grid">
+              {exams.map((exam) => {
+                const manual = exam.mode === "Koreksi admin";
+                return (
+                  <article className="student-exam-card" key={exam.id}>
+                    <div
+                      className={`student-exam-cover ${manual ? "orange-cover" : "purple-cover"}`}
+                    >
+                      <span className="date-badge">
+                        <CalendarDays /> Tersedia sekarang
+                      </span>
+                      <div className="cover-symbol" aria-hidden="true">
+                        {manual ? <FileText /> : <Sigma />}
+                      </div>
+                      <div className="cover-dots" aria-hidden="true">
+                        {manual ? (
+                          <Quote />
+                        ) : (
+                          <>
+                            <Divide />
+                            <X />
+                            <Plus />
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="student-exam-body">
+                      <p>{exam.subject.toUpperCase()}</p>
+                      <h3>{exam.shortTitle}</h3>
+                      <div className="student-exam-meta">
+                        <span>
+                          <Clock3 />
+                          {exam.duration} menit
+                        </span>
+                        <span>
+                          <ListChecks />
+                          {exam.questions} soal
+                        </span>
+                      </div>
+                      {manual && (
+                        <div className="mode-student-note">
+                          <ClipboardCheck />
+                          <span>
+                            <strong>{exam.mode}</strong>
+                            <small>Nilai tampil setelah diperiksa</small>
+                          </span>
+                        </div>
+                      )}
+                      <Link
+                        to={`/student/exam/${exam.id}`}
+                        className="button secondary full"
+                      >
+                        Lihat detail <ArrowRight />
+                      </Link>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+            {exams.length === 0 && (
+              <section className="panel student-tab-empty">
+                <p>Belum ada ujian yang ditugaskan untukmu.</p>
+              </section>
+            )}
+          </section>
+        )}
+
+        {!loading && !error && activeTab === "history" && (
+          <section className="student-tab-panel student-history-section" role="tabpanel">
+            <div className="student-section-title">
+              <div>
+                <h2>Histori ujian</h2>
                 <p>Nilai dan detail jawaban dari setiap attempt yang selesai.</p>
               </div>
               <span>{history.length} attempt</span>
             </div>
-            <div className="past-exams">
-              {history.map((attempt) => (
-                <article className="past-exam-row" key={attempt.id}>
-                  <span className="past-icon purple">
-                    <History />
-                  </span>
-                  <div>
-                    <strong>{attempt.examName}</strong>
-                    <small>
-                      Attempt {attempt.attemptNo} ·{" "}
-                      {new Intl.DateTimeFormat("id-ID", {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      }).format(new Date(attempt.submittedAt))}
-                    </small>
-                  </div>
-                  <span className="score-pill">
-                    {typeof attempt.score === "number"
-                      ? attempt.score
-                      : "Menunggu"}
-                  </span>
-                  <Link
-                    to={`/student/result/${attempt.id}`}
-                    aria-label={`Lihat hasil ${attempt.examName} attempt ${attempt.attemptNo}`}
-                  >
-                    <ArrowRight />
-                  </Link>
-                </article>
-              ))}
-            </div>
+            {history.length > 0 ? (
+              <div className="past-exams">
+                {history.map((attempt) => (
+                  <article className="past-exam-row" key={attempt.id}>
+                    <span className="past-icon purple">
+                      <History />
+                    </span>
+                    <div>
+                      <strong>{attempt.examName}</strong>
+                      <small>
+                        Attempt {attempt.attemptNo} ·{" "}
+                        {new Intl.DateTimeFormat("id-ID", {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        }).format(new Date(attempt.submittedAt))}
+                      </small>
+                    </div>
+                    <span className="score-pill">
+                      {typeof attempt.score === "number"
+                        ? attempt.score
+                        : "Menunggu"}
+                    </span>
+                    <Link
+                      to={`/student/result/${attempt.id}`}
+                      aria-label={`Lihat hasil ${attempt.examName} attempt ${attempt.attemptNo}`}
+                    >
+                      <ArrowRight />
+                    </Link>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <section className="panel student-tab-empty">
+                <p>Belum ada histori ujian yang selesai.</p>
+              </section>
+            )}
           </section>
         )}
         <section className="student-tip">
