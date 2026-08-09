@@ -77,7 +77,11 @@ export const examRepository = {
   async saveAnswer(
     attemptId: string,
     questionId: string,
-    input: { selectedOptionId?: string | null; textRaw?: string | null; version: number },
+    input: {
+      selectedOptionId?: string | null;
+      textRaw?: string | null;
+      version: number;
+    },
   ) {
     const { data } = await envelope<ApiAnswer>(
       `/v1/student/attempts/${attemptId}/answers/${questionId}`,
@@ -131,7 +135,11 @@ export const examRepository = {
     );
     return data;
   },
-  async reviewAnswer(answerId: string, verdict: "correct" | "incorrect", revision: number) {
+  async reviewAnswer(
+    answerId: string,
+    verdict: "correct" | "incorrect",
+    revision: number,
+  ) {
     const { data } = await envelope<ApiAnswer>(
       `/v1/admin/answers/${answerId}/review`,
       { method: "PUT", body: JSON.stringify({ verdict, revision }) },
@@ -152,7 +160,11 @@ export const examRepository = {
     );
     return data;
   },
-  async generateLeaderboard(examId: string, segmentType: string, segmentValue: string) {
+  async generateLeaderboard(
+    examId: string,
+    segmentType: string,
+    segmentValue: string,
+  ) {
     const { data } = await envelope<Record<string, unknown>>(
       `/v1/admin/exams/${examId}/leaderboards`,
       { method: "POST", body: JSON.stringify({ segmentType, segmentValue }) },

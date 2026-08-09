@@ -25,9 +25,10 @@ function queryString(filters: StudentFilters) {
 export const studentRepository = {
   getCurrentProfile: () => getSession()?.profile || null,
   async list(filters: StudentFilters = {}) {
-    const response = await envelope<ApiStudent[], { total: number; limit: number; offset: number }>(
-      `/v1/admin/students${queryString({ limit: 100, ...filters })}`,
-    );
+    const response = await envelope<
+      ApiStudent[],
+      { total: number; limit: number; offset: number }
+    >(`/v1/admin/students${queryString({ limit: 100, ...filters })}`);
     return { students: response.data.map(mapStudent), page: response.meta };
   },
   async create(input: {
@@ -40,7 +41,10 @@ export const studentRepository = {
       "/v1/admin/students",
       { method: "POST", body: JSON.stringify(input) },
     );
-    return { student: { ...mapStudent(data.student), code: data.loginCode }, loginCode: data.loginCode };
+    return {
+      student: { ...mapStudent(data.student), code: data.loginCode },
+      loginCode: data.loginCode,
+    };
   },
   async update(id: string, input: Record<string, unknown>) {
     const { data } = await envelope<ApiStudent>(`/v1/admin/students/${id}`, {

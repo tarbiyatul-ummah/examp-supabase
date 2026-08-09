@@ -23,6 +23,7 @@ export type ApiStudent = {
   notes?: string;
   status: "active" | "inactive";
   codeHint?: string;
+  assignmentCount?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -39,6 +40,10 @@ export type ApiExam = {
   status: "draft" | "published" | "archived";
   currentVersion: number;
   questionCount: number;
+  assignmentCount: number;
+  activeAttemptCount: number;
+  completedAttemptCount: number;
+  averageScore?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -108,7 +113,8 @@ export type ApiAttempt = {
 };
 
 export type ApiMonitoringRow = {
-  attempt: ApiAttempt;
+  assignmentId: string;
+  attempt?: ApiAttempt;
   student: ApiStudent;
   answeredCount: number;
   questionCount: number;

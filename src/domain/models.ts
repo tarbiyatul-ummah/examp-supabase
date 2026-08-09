@@ -45,6 +45,9 @@ export type Exam = {
   phase: string;
   version: number;
   publishedAt?: string;
+  averageScore?: number;
+  activeAttempts?: number;
+  completedAttempts?: number;
 };
 
 export type Question = {

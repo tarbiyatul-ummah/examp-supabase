@@ -27,14 +27,16 @@ export function textDocument(text: string): Record<string, unknown> {
 }
 
 function phaseFor(level: ApiExam["targetLevel"], grades: number[]) {
-  const grade = grades[0];
-  if (!level || !grade) return "-";
-  if (grade <= 2) return "A";
-  if (grade <= 4) return "B";
-  if (grade <= 6) return "C";
-  if (grade <= 9) return "D";
-  if (grade === 10) return "E";
-  return "F";
+  if (!level || !grades.length) return "-";
+  const phases = grades.map((grade) => {
+    if (grade <= 2) return "A";
+    if (grade <= 4) return "B";
+    if (grade <= 6) return "C";
+    if (grade <= 9) return "D";
+    if (grade === 10) return "E";
+    return "F";
+  });
+  return [...new Set(phases)].join(", ");
 }
 
 export function mapStudent(student: ApiStudent): Student {
@@ -47,11 +49,19 @@ export function mapStudent(student: ApiStudent): Student {
     className: String(student.grade),
     phase: student.phase,
     status: student.status === "active" ? "Aktif" : "Nonaktif",
-    assigned: 0,
+    assigned: student.assignmentCount ?? 0,
   };
 }
 
 export function mapExam(exam: ApiExam, index = 0): Exam {
+  const status = exam.status === "draft"
+    ? "Draf"
+    : exam.status === "archived" ||
+        (exam.assignmentCount > 0 && exam.completedAttemptCount >= exam.assignmentCount)
+      ? "Selesai"
+      : exam.activeAttemptCount > 0 || exam.completedAttemptCount > 0
+        ? "Berlangsung"
+        : "Terbit";
   const parts = exam.name.split(/\s+[—–-]\s+/);
   return {
     id: exam.id,
@@ -61,13 +71,8 @@ export function mapExam(exam: ApiExam, index = 0): Exam {
     description: documentText(exam.descriptionDoc),
     duration: Math.max(1, Math.round(exam.durationSeconds / 60)),
     questions: exam.questionCount,
-    participants: 0,
-    status:
-      exam.status === "draft"
-        ? "Draf"
-        : exam.status === "published"
-          ? "Terbit"
-          : "Selesai",
+    participants: exam.assignmentCount,
+    status,
     mode:
       exam.gradingMode === "manual_review"
         ? "Koreksi admin"
@@ -77,6 +82,9 @@ export function mapExam(exam: ApiExam, index = 0): Exam {
     grades: exam.targetGrades || [],
     phase: phaseFor(exam.targetLevel, exam.targetGrades),
     version: exam.currentVersion,
+    averageScore: exam.averageScore,
+    activeAttempts: exam.activeAttemptCount,
+    completedAttempts: exam.completedAttemptCount,
     publishedAt:
       exam.status === "published"
         ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(

@@ -212,7 +212,7 @@ function tokenPair(session: any) {
   };
 }
 
-function mapStudent(row: any, codeHint?: string) {
+function mapStudent(row: any, codeHint?: string, assignmentCount = 0) {
   return {
     id: row.id,
     name: row.name,
@@ -224,12 +224,22 @@ function mapStudent(row: any, codeHint?: string) {
     notes: row.notes ?? undefined,
     status: row.status,
     codeHint: codeHint ?? undefined,
+    assignmentCount,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
-function mapExam(row: any, questionCount = 0) {
+function mapExam(
+  row: any,
+  questionCount = 0,
+  stats: {
+    assignmentCount?: number;
+    activeAttemptCount?: number;
+    completedAttemptCount?: number;
+    averageScore?: number;
+  } = {},
+) {
   return {
     id: row.id,
     name: row.name,
@@ -242,6 +252,10 @@ function mapExam(row: any, questionCount = 0) {
     status: row.status,
     currentVersion: row.current_version,
     questionCount,
+    assignmentCount: stats.assignmentCount ?? 0,
+    activeAttemptCount: stats.activeAttemptCount ?? 0,
+    completedAttemptCount: stats.completedAttemptCount ?? 0,
+    averageScore: stats.averageScore,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -328,12 +342,63 @@ async function examsWithCounts(rows: any[]) {
           .in("exam_version_id", versionIds),
       )
     : [];
+  const assignments = dataOrThrow<any[]>(
+    await service
+      .from("exam_assignments")
+      .select("id,exam_id")
+      .in(
+        "exam_id",
+        rows.map((row) => row.id),
+      )
+      .is("revoked_at", null),
+  );
+  const attempts = assignments.length
+    ? dataOrThrow<any[]>(
+        await service
+          .from("attempts")
+          .select("assignment_id,status,score,is_current")
+          .in(
+            "assignment_id",
+            assignments.map((assignment) => assignment.id),
+          )
+          .eq("is_current", true),
+      )
+    : [];
   return rows.map((exam) => {
     const versionId = chosen.get(exam.id)?.id;
+    const examAssignments = assignments.filter(
+      (assignment) => assignment.exam_id === exam.id,
+    );
+    const assignmentIds = new Set(
+      examAssignments.map((assignment) => assignment.id),
+    );
+    const examAttempts = attempts.filter((attempt) =>
+      assignmentIds.has(attempt.assignment_id)
+    );
+    const activeAttemptCount = examAttempts.filter((attempt) =>
+      ["in_progress", "paused_disconnected"].includes(attempt.status)
+    ).length;
+    const completedAttemptCount = examAttempts.filter((attempt) =>
+      ["submitted", "time_expired", "disqualified", "cancelled"].includes(
+        attempt.status,
+      )
+    ).length;
+    const scores = examAttempts
+      .map((attempt) => attempt.score)
+      .filter((score): score is number => score !== null && score !== undefined)
+      .map(Number);
     return mapExam(
       exam,
       questions.filter((question) => question.exam_version_id === versionId)
         .length,
+      {
+        assignmentCount: examAssignments.length,
+        activeAttemptCount,
+        completedAttemptCount,
+        averageScore: scores.length
+          ? Math.round((scores.reduce((sum, score) => sum + score, 0) / scores.length) * 100) / 100
+          : undefined,
+      },
     );
   });
 }
@@ -686,7 +751,23 @@ async function handle(request: Request) {
       Math.max(1, Number(url.searchParams.get("limit") ?? 100)),
     );
     const offset = Math.max(0, Number(url.searchParams.get("offset") ?? 0));
-    if (search) query = query.ilike("name", `%${search.replace(/[%,]/g, "")}%`);
+    if (search) {
+      const safeSearch = search.replace(/[%,()."']/g, "");
+      const codeCandidate = search.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const matchingCredentials = codeCandidate.length > 0 && codeCandidate.length <= 2
+        ? dataOrThrow<any[]>(
+            await service
+              .from("student_credentials")
+              .select("student_id")
+              .ilike("code_hint", `%${codeCandidate}%`)
+              .is("revoked_at", null),
+          )
+        : [];
+      const credentialIds = matchingCredentials.map((item) => item.student_id);
+      query = credentialIds.length
+        ? query.or(`name.ilike.%${safeSearch}%,id.in.(${credentialIds.join(",")})`)
+        : query.ilike("name", `%${safeSearch}%`);
+    }
     if (level) query = query.eq("level", level);
     if (phase) query = query.eq("phase", phase);
     if (grade) query = query.eq("grade", Number(grade));
@@ -708,12 +789,25 @@ async function handle(request: Request) {
             .is("revoked_at", null),
         )
       : [];
+    const assignments = rows.length
+      ? dataOrThrow<any[]>(
+          await service
+            .from("exam_assignments")
+            .select("student_id")
+            .in(
+              "student_id",
+              rows.map((row: any) => row.id),
+            )
+            .is("revoked_at", null),
+        )
+      : [];
     return json(
       request,
       rows.map((row: any) =>
         mapStudent(
           row,
           credentials.find((item) => item.student_id === row.id)?.code_hint,
+          assignments.filter((item) => item.student_id === row.id).length,
         ),
       ),
       200,
@@ -1169,7 +1263,8 @@ async function handle(request: Request) {
       await service
         .from("exam_assignments")
         .select("id,student_id")
-        .eq("exam_id", match[1]),
+        .eq("exam_id", match[1])
+        .is("revoked_at", null),
     );
     if (!assignments.length) return json(request, []);
     const attempts = dataOrThrow<any[]>(
@@ -1191,11 +1286,26 @@ async function handle(request: Request) {
           assignments.map((row) => row.student_id),
         ),
     );
+    const exam = dataOrThrow<any>(
+      await service.from("exams").select("*").eq("id", match[1]).single(),
+    );
+    const examSummary = (await examsWithCounts([exam]))[0];
     const result = [];
-    for (const attempt of attempts) {
-      const assignment = assignments.find(
-        (item) => item.id === attempt.assignment_id,
+    for (const assignment of assignments) {
+      const attempt = attempts.find(
+        (item) => item.assignment_id === assignment.id,
       );
+      const student = students.find((item) => item.id === assignment.student_id);
+      if (!student) continue;
+      if (!attempt) {
+        result.push({
+          assignmentId: assignment.id,
+          student: mapStudent(student),
+          answeredCount: 0,
+          questionCount: examSummary.questionCount,
+        });
+        continue;
+      }
       const answered = dataOrThrow<any[]>(
         await service.from("answers").select("id").eq("attempt_id", attempt.id),
       );
@@ -1206,14 +1316,13 @@ async function handle(request: Request) {
           .eq("attempt_id", attempt.id),
       );
       result.push({
+        assignmentId: assignment.id,
         attempt: {
           ...(await attemptSnapshot(attempt.id)),
           questions: undefined,
           answers: undefined,
         },
-        student: mapStudent(
-          students.find((item) => item.id === assignment.student_id),
-        ),
+        student: mapStudent(student),
         answeredCount: answered.length,
         questionCount: questions.length,
         lastActivity: attempt.last_heartbeat_at ?? attempt.updated_at,
@@ -1242,7 +1351,8 @@ async function handle(request: Request) {
       await service
         .from("exam_assignments")
         .select("id,student_id")
-        .eq("exam_id", match[1]),
+        .eq("exam_id", match[1])
+        .is("revoked_at", null),
     );
     if (!assignments.length) return json(request, []);
     const attempts = dataOrThrow<any[]>(
@@ -1259,6 +1369,7 @@ async function handle(request: Request) {
           "reviewed",
           "released",
         ])
+        .eq("is_current", true)
         .order("submitted_at"),
     );
     const students = dataOrThrow<any[]>(

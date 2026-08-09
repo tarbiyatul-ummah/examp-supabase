@@ -53,7 +53,12 @@ export const authRepository = {
       role: "Peserta",
       className: `Kelas ${data.student.grade}`,
     };
-    saveSession({ role: "student", tokens: data.tokens, profile, student: data.student });
+    saveSession({
+      role: "student",
+      tokens: data.tokens,
+      profile,
+      student: data.student,
+    });
     return profile;
   },
   async logout() {

@@ -1,13 +1,22 @@
 import { ReactNode, useEffect } from 'react'
 import { Check, CheckCircle2, ChevronDown, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { getSession } from '../../lib/session'
 export { Drawer } from './Drawer'
 
 export type Toast = { message: string; kind?: 'success' | 'info' }
 
-export function Brand({ light = false }: { light?: boolean }) {
+export function Brand({ light = false, to }: { light?: boolean; to?: string }) {
+  const session = getSession()
+  const destination = to ?? (
+    session?.role === 'student'
+      ? '/student'
+      : session?.role === 'admin' || session?.role === 'super_admin'
+        ? '/admin'
+        : '/'
+  )
   return (
-    <Link to="/" className={`brand ${light ? 'brand-light' : ''}`}>
+    <Link to={destination} className={`brand ${light ? 'brand-light' : ''}`} aria-label="Kembali ke dashboard RuangUji">
       <span className="brand-mark"><Check /></span>
       <span>ruang<span>uji</span></span>
     </Link>
