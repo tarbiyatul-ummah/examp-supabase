@@ -81,7 +81,7 @@ export const examRepository = {
   },
   async attemptHistory() {
     const { data } = await envelope<ApiAttemptHistory[]>(
-      "/v1/student/attempts/history",
+      "/v1/student/history",
     );
     return data;
   },

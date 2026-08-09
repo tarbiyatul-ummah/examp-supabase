@@ -1329,7 +1329,11 @@ async function handle(request: Request) {
     return json(request, await examsWithCounts(exams));
   }
 
-  if (path === "/v1/student/attempts/history" && method === "GET") {
+  if (
+    ["/v1/student/history", "/v1/student/attempts/history"].includes(
+      path.replace(/\/+$/, ""),
+    ) && method === "GET"
+  ) {
     const auth = await actor(request, ["student"]);
     const student = await studentForUser(auth.user.id);
     const assignments = dataOrThrow<any[]>(
@@ -1410,14 +1414,18 @@ async function handle(request: Request) {
     return json(request, await attemptSnapshot(attemptId), 201);
   }
 
-  match = path.match(/^\/v1\/student\/attempts\/([^/]+)$/);
+  match = path.match(
+    /^\/v1\/student\/attempts\/([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})$/,
+  );
   if (match && method === "GET") {
     const auth = await actor(request, ["student"]);
     await assertAttemptAccess(match[1], auth);
     return json(request, await attemptSnapshot(match[1]));
   }
 
-  match = path.match(/^\/v1\/student\/attempts\/([^/]+)\/answers\/([^/]+)$/);
+  match = path.match(
+    /^\/v1\/student\/attempts\/([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})\/answers\/([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})$/,
+  );
   if (match && method === "PUT") {
     const auth = await actor(request, ["student"]);
     const access = await assertAttemptAccess(match[1], auth);
@@ -1440,7 +1448,9 @@ async function handle(request: Request) {
     return json(request, mapAnswer(answer));
   }
 
-  match = path.match(/^\/v1\/student\/attempts\/([^/]+)\/heartbeat$/);
+  match = path.match(
+    /^\/v1\/student\/attempts\/([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})\/heartbeat$/,
+  );
   if (match && method === "POST") {
     const auth = await actor(request, ["student"]);
     const access = await assertAttemptAccess(match[1], auth);
@@ -1464,7 +1474,9 @@ async function handle(request: Request) {
     });
   }
 
-  match = path.match(/^\/v1\/student\/attempts\/([^/]+)\/submit$/);
+  match = path.match(
+    /^\/v1\/student\/attempts\/([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})\/submit$/,
+  );
   if (match && method === "POST") {
     const auth = await actor(request, ["student"]);
     await assertAttemptAccess(match[1], auth);
@@ -1474,7 +1486,9 @@ async function handle(request: Request) {
     return json(request, await attemptSnapshot(match[1]));
   }
 
-  match = path.match(/^\/v1\/student\/attempts\/([^/]+)\/result$/);
+  match = path.match(
+    /^\/v1\/student\/attempts\/([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})\/result$/,
+  );
   if (match && method === "GET") {
     const auth = await actor(request, ["student"]);
     const access = await assertAttemptAccess(match[1], auth);
