@@ -57,6 +57,122 @@ export function questionDocument(
   };
 }
 
+export function htmlText(html: string): string {
+  const container = window.document.createElement("div");
+  container.innerHTML = html;
+  container
+    .querySelectorAll("[data-question-image-id]")
+    .forEach((element) => element.remove());
+  return (container.textContent || "").replace(/\s+/g, " ").trim();
+}
+
+type DocumentNode = Record<string, unknown>;
+
+function inlineDocumentNodes(
+  node: Node,
+  inheritedMarks: Array<{ type: string }> = [],
+): DocumentNode[] {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = node.textContent || "";
+    return text
+      ? [{ type: "text", text, ...(inheritedMarks.length ? { marks: inheritedMarks } : {}) }]
+      : [];
+  }
+  if (!(node instanceof HTMLElement)) return [];
+  if (node.tagName === "BR") return [{ type: "hardBreak" }];
+
+  const marks = [...inheritedMarks];
+  if (["B", "STRONG"].includes(node.tagName)) marks.push({ type: "bold" });
+  if (["I", "EM"].includes(node.tagName)) marks.push({ type: "italic" });
+  if (node.tagName === "U") marks.push({ type: "underline" });
+  if (node.tagName === "SPAN") {
+    if (/bold|[6-9]00/.test(node.style.fontWeight)) marks.push({ type: "bold" });
+    if (node.style.fontStyle === "italic") marks.push({ type: "italic" });
+    if (node.style.textDecoration.includes("underline"))
+      marks.push({ type: "underline" });
+  }
+  return [...node.childNodes].flatMap((child) =>
+    inlineDocumentNodes(child, marks),
+  );
+}
+
+function imageDocumentNode(
+  element: HTMLElement,
+  mediaById: Record<string, ApiMediaAsset>,
+): DocumentNode[] {
+  const id = element.dataset.questionImageId;
+  const image = id ? mediaById[id] : undefined;
+  if (!image) return [];
+  const altInput = element.querySelector<HTMLInputElement>("[data-image-alt]");
+  return [
+    {
+      type: "image",
+      attrs: {
+        bucketId: image.bucketId,
+        objectPath: image.objectPath,
+        mimeType: image.mimeType,
+        byteSize: image.byteSize,
+        altText: altInput?.value.trim() || image.altText,
+        ...(image.width ? { width: image.width } : {}),
+        ...(image.height ? { height: image.height } : {}),
+      },
+    },
+  ];
+}
+
+function blockDocumentNodes(
+  node: Node,
+  mediaById: Record<string, ApiMediaAsset>,
+): DocumentNode[] {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const content = inlineDocumentNodes(node);
+    return content.length ? [{ type: "paragraph", content }] : [];
+  }
+  if (!(node instanceof HTMLElement)) return [];
+  if (node.matches("figure[data-question-image-id]")) {
+    return imageDocumentNode(node, mediaById);
+  }
+  if (node.tagName === "UL" || node.tagName === "OL") {
+    const items = [...node.children]
+      .filter((child) => child.tagName === "LI")
+      .map((item) => ({
+        type: "listItem",
+        content: [
+          {
+            type: "paragraph",
+            content: inlineDocumentNodes(item),
+          },
+        ],
+      }));
+    return items.length
+      ? [{ type: node.tagName === "UL" ? "bulletList" : "orderedList", content: items }]
+      : [];
+  }
+  const nestedBlocks = [...node.children].some((child) =>
+    ["DIV", "P", "UL", "OL", "FIGURE"].includes(child.tagName),
+  );
+  if (nestedBlocks) {
+    return [...node.childNodes].flatMap((child) =>
+      blockDocumentNodes(child, mediaById),
+    );
+  }
+  return [{ type: "paragraph", content: inlineDocumentNodes(node) }];
+}
+
+export function richTextDocument(
+  html: string,
+  mediaById: Record<string, ApiMediaAsset> = {},
+): Record<string, unknown> {
+  const container = window.document.createElement("div");
+  container.innerHTML = html;
+  return {
+    type: "doc",
+    content: [...container.childNodes].flatMap((node) =>
+      blockDocumentNodes(node, mediaById),
+    ),
+  };
+}
+
 export function documentImage(value: unknown): ApiMediaAsset | undefined {
   if (!value || typeof value !== "object") return undefined;
   const node = value as Record<string, unknown>;

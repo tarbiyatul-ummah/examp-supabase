@@ -12,15 +12,11 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Brand } from "../../../components/ui";
-import type {
-  ApiAttempt,
-  ApiMediaAsset,
-  ApiQuestion,
-} from "../../../domain/api";
+import { Brand, QuestionContent } from "../../../components/ui";
+import type { ApiAttempt, ApiQuestion } from "../../../domain/api";
 import { ApiError } from "../../../lib/api";
 import { examRepository } from "../../../repositories";
-import { documentImage, documentText } from "../../../repositories/mappers";
+import { documentText } from "../../../repositories/mappers";
 import { ConnectionOverlay } from "./ConnectionOverlay";
 import { SubmitExamModal } from "./SubmitExamModal";
 
@@ -28,8 +24,7 @@ type AttemptQuestion = {
   id: string;
   type: "Pilihan ganda" | "Isian angka" | "Isian pendek" | "Isian panjang";
   weight: number;
-  prompt: string;
-  image?: ApiMediaAsset;
+  contentDoc: Record<string, unknown>;
   options: Array<{ id: string; text: string }>;
 };
 type LocalAnswer = {
@@ -55,8 +50,7 @@ function toQuestions(attempt: ApiAttempt): AttemptQuestion[] {
           id: item.questionId,
           type: questionTypes[item.question.type],
           weight: item.question.weight,
-          prompt: documentText(item.question.contentDoc),
-          image: documentImage(item.question.contentDoc),
+          contentDoc: item.question.contentDoc,
           options: (item.question.options || []).map((option) => ({
             id: option.id,
             text: documentText(option.contentDoc),
@@ -310,12 +304,7 @@ export function ExamAttemptPage() {
             <span>{question.type.toUpperCase()}</span>
             <strong>{question.weight} POIN</strong>
           </div>
-          <h1>{question.prompt}</h1>
-          {question.image?.url && (
-            <figure className="question-content-media">
-              <img src={question.image.url} alt={question.image.altText} />
-            </figure>
-          )}
+          <QuestionContent document={question.contentDoc} />
           {question.type === "Pilihan ganda" ? (
             <div className="answer-options">
               {question.options.map((option, index) => (

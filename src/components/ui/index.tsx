@@ -3,6 +3,9 @@ import { Check, CheckCircle2, ChevronDown, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { getSession } from '../../lib/session'
 export { Drawer } from './Drawer'
+export { QuestionContent } from './QuestionContent'
+export { RichTextEditor } from './RichTextEditor'
+export type { RichTextDraftImage } from './RichTextEditor'
 
 export type Toast = { message: string; kind?: 'success' | 'info' }
 

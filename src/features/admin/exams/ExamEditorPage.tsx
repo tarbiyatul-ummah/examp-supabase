@@ -6,23 +6,22 @@ import {
   ChevronLeft,
   ClipboardCheck,
   FileText,
-  ImagePlus,
   Plus,
   Send,
   Sparkles,
   Trash2,
   Users,
 } from "lucide-react";
-import {
-  type ChangeEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AdminShell } from "../../../components/layout";
-import { Avatar, Toast, ToastMessage } from "../../../components/ui";
+import {
+  Avatar,
+  RichTextEditor,
+  Toast,
+  ToastMessage,
+} from "../../../components/ui";
+import type { RichTextDraftImage } from "../../../components/ui";
 import type {
   AcademicLevel,
   EntityId,
@@ -33,45 +32,22 @@ import { ApiError } from "../../../lib/api";
 import { examRepository, studentRepository } from "../../../repositories";
 import {
   documentText,
-  questionDocument,
+  htmlText,
+  richTextDocument,
   textDocument,
 } from "../../../repositories/mappers";
 
 type Mode = "instant" | "manual";
-type DraftImage = {
-  file: File;
-  previewUrl: string;
-  altText: string;
-  width?: number;
-  height?: number;
-};
 type DraftQuestion = {
   clientId: string;
   type: QuestionType;
-  prompt: string;
+  contentHtml: string;
+  images: RichTextDraftImage[];
   options: string[];
   correct: number;
   acceptedAnswer: string;
   weight: number;
-  image?: DraftImage;
 };
-
-const MAX_QUESTION_IMAGE_BYTES = 2.5 * 1024 * 1024;
-const ALLOWED_QUESTION_IMAGE_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-];
-
-function readImageSize(url: string) {
-  return new Promise<{ width: number; height: number }>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () =>
-      resolve({ width: image.naturalWidth, height: image.naturalHeight });
-    image.onerror = () => reject(new Error("Gambar tidak dapat dibaca."));
-    image.src = url;
-  });
-}
 
 const gradesForLevel: Record<AcademicLevel, number[]> = {
   SD: [1, 2, 3, 4, 5, 6],
@@ -82,7 +58,8 @@ const gradesForLevel: Record<AcademicLevel, number[]> = {
 const newQuestion = (): DraftQuestion => ({
   clientId: crypto.randomUUID(),
   type: "Pilihan ganda",
-  prompt: "",
+  contentHtml: "",
+  images: [],
   options: ["", "", "", ""],
   correct: 0,
   acceptedAnswer: "",
@@ -119,7 +96,6 @@ export function ExamEditorPage() {
       Awaited<ReturnType<typeof examRepository.uploadQuestionImage>>
     >(),
   );
-  const imageInputRef = useRef<HTMLInputElement>(null);
   const previewUrls = useRef(new Set<string>());
   const gradeMenuRef = useRef<HTMLDivElement>(null);
   const [publishing, setPublishing] = useState(false);
@@ -200,53 +176,6 @@ export function ExamEditorPage() {
     setActiveId(question.clientId);
   };
 
-  const removeQuestionImage = () => {
-    if (active.image) {
-      URL.revokeObjectURL(active.image.previewUrl);
-      previewUrls.current.delete(active.image.previewUrl);
-    }
-    uploadedMedia.current.delete(active.clientId);
-    updateActive({ image: undefined });
-  };
-
-  const selectQuestionImage = async (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
-    if (!file) return;
-    if (!ALLOWED_QUESTION_IMAGE_TYPES.includes(file.type)) {
-      setToast({ message: "Format gambar harus JPG, PNG, atau WebP." });
-      return;
-    }
-    if (file.size > MAX_QUESTION_IMAGE_BYTES) {
-      setToast({ message: "Gambar tidak boleh lebih dari 2,5 MB." });
-      return;
-    }
-
-    const previewUrl = URL.createObjectURL(file);
-    try {
-      const size = await readImageSize(previewUrl);
-      if (active.image) {
-        URL.revokeObjectURL(active.image.previewUrl);
-        previewUrls.current.delete(active.image.previewUrl);
-      }
-      previewUrls.current.add(previewUrl);
-      uploadedMedia.current.delete(active.clientId);
-      updateActive({
-        image: {
-          file,
-          previewUrl,
-          altText: file.name.replace(/\.[^.]+$/, ""),
-          ...size,
-        },
-      });
-    } catch {
-      URL.revokeObjectURL(previewUrl);
-      setToast({ message: "Gambar tidak dapat dibaca. Pilih file lain." });
-    }
-  };
-
   const changeLevel = (nextLevel: AcademicLevel) => {
     setLevel(nextLevel);
     setGrades([gradesForLevel[nextLevel][0]]);
@@ -282,11 +211,11 @@ export function ExamEditorPage() {
   const validateQuestions = () => {
     if (!questions.length) return "Minimal satu soal diperlukan.";
     for (const [index, question] of questions.entries()) {
-      if (!question.prompt.trim())
+      if (!htmlText(question.contentHtml) && !question.images.length)
         return `Pertanyaan soal ${index + 1} belum diisi.`;
       if (question.weight <= 0)
         return `Bobot soal ${index + 1} harus lebih dari nol.`;
-      if (question.image && !question.image.altText.trim())
+      if (question.images.some((image) => !image.altText.trim()))
         return `Teks alternatif gambar soal ${index + 1} wajib diisi.`;
       if (
         question.type === "Pilihan ganda" &&
@@ -364,22 +293,29 @@ export function ExamEditorPage() {
 
       for (const [index, question] of questions.entries()) {
         if (uploaded.current.has(question.clientId)) continue;
-        let media = uploadedMedia.current.get(question.clientId);
-        if (question.image && !media) {
-          media = await examRepository.uploadQuestionImage(
-            examId,
-            question.image.file,
-            {
-              altText: question.image.altText.trim(),
-              width: question.image.width,
-              height: question.image.height,
-            },
-          );
-          uploadedMedia.current.set(question.clientId, media);
+        const mediaById: Record<
+          string,
+          Awaited<ReturnType<typeof examRepository.uploadQuestionImage>>
+        > = {};
+        for (const image of question.images) {
+          let media = uploadedMedia.current.get(image.id);
+          if (!media) {
+            media = await examRepository.uploadQuestionImage(
+              examId,
+              image.file,
+              {
+                altText: image.altText.trim(),
+                width: image.width,
+                height: image.height,
+              },
+            );
+            uploadedMedia.current.set(image.id, media);
+          }
+          mediaById[image.id] = media;
         }
         await examRepository.addQuestion(examId, {
           type: typeMap[question.type],
-          contentDoc: questionDocument(question.prompt, media),
+          contentDoc: richTextDocument(question.contentHtml, mediaById),
           weight: question.weight,
           position: index + 1,
           shuffleOptions: question.type === "Pilihan ganda",
@@ -607,7 +543,12 @@ export function ExamEditorPage() {
                   >
                     <span>{index + 1}</span>
                     <div>
-                      <strong>{question.prompt || "Soal belum diisi"}</strong>
+                      <strong>
+                        {htmlText(question.contentHtml) ||
+                          (question.images.length
+                            ? `Soal dengan ${question.images.length} gambar`
+                            : "Soal belum diisi")}
+                      </strong>
                       <small>{question.type}</small>
                     </div>
                   </button>
@@ -649,11 +590,11 @@ export function ExamEditorPage() {
                     className="icon-button destructive"
                     onClick={() => {
                       if (questions.length === 1) return;
-                      if (active.image) {
-                        URL.revokeObjectURL(active.image.previewUrl);
-                        previewUrls.current.delete(active.image.previewUrl);
-                      }
-                      uploadedMedia.current.delete(active.clientId);
+                      active.images.forEach((image) => {
+                        URL.revokeObjectURL(image.previewUrl);
+                        previewUrls.current.delete(image.previewUrl);
+                        uploadedMedia.current.delete(image.id);
+                      });
                       const next = questions.filter(
                         (item) => item.clientId !== active.clientId,
                       );
@@ -666,81 +607,21 @@ export function ExamEditorPage() {
                 </div>
               </div>
 
-              <div className="question-content-editor">
-                <div className="question-content-toolbar">
-                  <div>
-                    <strong>Isi soal</strong>
-                    <small>Teks dan gambar akan tampil sesuai preview.</small>
-                  </div>
-                  <button
-                    type="button"
-                    className="button secondary question-image-button"
-                    onClick={() => imageInputRef.current?.click()}
-                  >
-                    <ImagePlus />
-                    {active.image ? "Ganti gambar" : "Sisipkan gambar"}
-                  </button>
-                  <input
-                    ref={imageInputRef}
-                    className="visually-hidden"
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    onChange={(event) => void selectQuestionImage(event)}
-                  />
-                </div>
-                <textarea
-                  className="question-prompt-input"
-                  value={active.prompt}
-                  onChange={(event) =>
-                    updateActive({ prompt: event.target.value })
-                  }
-                  placeholder="Tulis pertanyaan di sini..."
-                />
-                {active.image && (
-                  <div className="question-image-editor">
-                    <img
-                      src={active.image.previewUrl}
-                      alt={active.image.altText || "Preview gambar soal"}
-                    />
-                    <div className="question-image-details">
-                      <label htmlFor={`question-image-alt-${active.clientId}`}>
-                        Teks alternatif gambar
-                      </label>
-                      <input
-                        id={`question-image-alt-${active.clientId}`}
-                        maxLength={500}
-                        value={active.image.altText}
-                        onChange={(event) =>
-                          updateActive({
-                            image: {
-                              ...active.image!,
-                              altText: event.target.value,
-                            },
-                          })
-                        }
-                        placeholder="Jelaskan isi gambar"
-                      />
-                      <small>
-                        {(active.image.file.size / 1024 / 1024).toFixed(2)} MB
-                        {active.image.width && active.image.height
-                          ? ` · ${active.image.width} × ${active.image.height} px`
-                          : ""}
-                      </small>
-                    </div>
-                    <button
-                      type="button"
-                      className="icon-button destructive"
-                      aria-label="Hapus gambar soal"
-                      onClick={removeQuestionImage}
-                    >
-                      <Trash2 />
-                    </button>
-                  </div>
-                )}
-                <small className="question-image-hint">
-                  JPG, PNG, atau WebP · maksimal 2,5 MB.
-                </small>
-              </div>
+              <RichTextEditor
+                key={active.clientId}
+                value={active.contentHtml}
+                images={active.images}
+                onChange={(contentHtml, images) =>
+                  updateActive({ contentHtml, images })
+                }
+                onToast={(message) => setToast({ message, kind: "info" })}
+                onPreviewCreated={(url) => previewUrls.current.add(url)}
+                onPreviewRemoved={(image) => {
+                  URL.revokeObjectURL(image.previewUrl);
+                  previewUrls.current.delete(image.previewUrl);
+                  uploadedMedia.current.delete(image.id);
+                }}
+              />
 
               {active.type === "Pilihan ganda" ? (
                 <div className="option-editor">
