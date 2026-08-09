@@ -1,12 +1,12 @@
 # Design QA
 
-- Source visual truth: dua screenshot pengguna pada percakapan—overview ujian peserta dan modal konfirmasi pengumpulan (tidak tersedia sebagai file lokal).
+- Source visual truth: screenshot card ujian peserta yang dilampirkan pengguna pada percakapan (tidak tersedia sebagai file lokal).
 - Implementation screenshot: tidak tersedia; koneksi in-app browser mengembalikan `No browser is available`.
-- Intended viewport: desktop, sekitar 1416 × 852 px untuk overview dan 1416 × 640 px untuk modal.
-- Source dimensions: sekitar 1416 × 852 px dan 1416 × 640 px.
+- Intended viewport: desktop, crop card sekitar 664 × 394 px.
+- Source dimensions: sekitar 664 × 394 px.
 - Implementation dimensions: tidak dapat diukur.
 - Density normalization: tidak dapat dilakukan tanpa capture implementasi.
-- State: overview sebelum mulai dan modal konfirmasi setelah seluruh soal dijawab.
+- State: card ujian tersedia, histori attempt berisi nilai, dan detail hasil terbuka.
 
 ## Full-view comparison evidence
 
@@ -14,34 +14,35 @@ Tidak dapat dilakukan karena browser-rendered implementation screenshot tidak te
 
 ## Focused region comparison evidence
 
-Tidak dapat dilakukan. Region yang harus dibandingkan adalah posisi ilustrasi sampul, lebar/rata kiri kartu informasi, lebar modal, alignment statistik, error submit, dan breakpoint mobile.
+Tidak dapat dilakukan. Region yang perlu dibandingkan adalah jarak metadata ke tombol card, posisi ikon cover, toggle re-attempt admin, daftar histori, dan detail jawaban per soal.
 
 ## Required fidelity surfaces
 
-- Typography: token tipografi aplikasi dipertahankan; tidak dapat dibandingkan secara visual.
-- Spacing/layout: page dan card dibuat fill-container dalam batas 1200 px; copy, statistik, dan instruction box dibuat 100% serta rata kiri.
-- Colors/tokens: warna dan semantic tokens aplikasi dipertahankan.
-- Image quality/assets: glyph dekoratif diganti dengan ikon Lucide dan dikunci di dalam cover yang memiliki positioning context sendiri.
-- Copy/content: teks overview dan konfirmasi dipertahankan; state `Mengumpulkan...` dan pesan error ditambahkan untuk feedback aksi.
+- Typography: token tipografi aplikasi dipertahankan; capture belum tersedia.
+- Spacing/layout: tombol card diberi jarak 20 px dari metadata; daftar histori dan detail jawaban memenuhi container.
+- Colors/tokens: warna teal, purple, orange, gray, border, dan surface memakai token aplikasi yang sudah ada.
+- Image quality/assets: glyph dekoratif card diganti ikon Lucide agar tidak mengalami mojibake dan tetap tajam.
+- Copy/content: opsi re-attempt, histori nilai, attempt number, status nilai, dan detail jawaban ditambahkan.
 
 ## Findings
 
-- [Blocked] QA visual dan interaksi submit belum dapat diverifikasi di browser.
+- [Blocked] QA visual dan interaksi end-to-end belum dapat diverifikasi di browser.
   - Evidence: koneksi in-app browser tidak tersedia pada sesi ini.
-  - Remaining checks: tidak ada overlap cover/title, ukuran desktop/mobile, refresh deep-link, submit success/error, fokus keyboard, dan console errors.
+  - Remaining checks: spacing card desktop/mobile, toggle admin tersimpan, attempt kedua tercipta, histori berurutan, detail jawaban, dan console errors.
 
 ## Code/build checks completed
 
 - TypeScript dan production build berhasil.
-- Cover sekarang memiliki `position: relative` dan `overflow: hidden`, sehingga ornamen absolut tidak dapat keluar ke area judul.
-- Overview, info cards, instruction box, dan submit stats mengisi container serta rata kiri.
-- Submit mengosongkan timer, menyimpan ulang semua jawaban, mencegah double-submit, dan menampilkan error backend.
-- SPA fallback tersedia untuk Vercel (`vercel.json`) serta host berbasis `_redirects` (`public/_redirects`).
+- Kebijakan `allow_reattempt` dikirim dari editor admin hingga database.
+- Attempt lama dipertahankan; attempt baru hanya otomatis diizinkan setelah status `submitted` atau `time_expired`.
+- Endpoint histori hanya mengembalikan attempt selesai milik peserta aktif.
+- Nilai dan verdict koreksi manual tidak dibuka sebelum status hasil `released`.
+- Card ujian memiliki spacing 20 px antara informasi dan tombol.
 
 ## Comparison history
 
-- Initial evidence: simbol sigma keluar dari panel ungu dan menimpa judul; stat cards tidak terasa fill-container/rata kiri; submit tidak memberi feedback saat gagal.
-- Implementation pass: positioning cover diperbaiki, glyph diganti ikon, ukuran container diperluas, alignment dirapikan, dan submit dibuat observable serta retry-safe.
+- Initial evidence: tombol card terlalu dekat dengan metadata.
+- Implementation pass: margin atas tombol ditambah, ikon cover distabilkan, serta fitur re-attempt/histori dibangun mengikuti pola card aplikasi.
 - Post-fix evidence: capture pembanding terblokir karena browser tidak tersedia.
 
 final result: blocked

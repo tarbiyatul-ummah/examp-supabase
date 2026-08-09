@@ -1,6 +1,7 @@
 import type {
   ApiAnswer,
   ApiAttempt,
+  ApiAttemptHistory,
   ApiExam,
   ApiMediaAsset,
   ApiMonitoringRow,
@@ -77,6 +78,12 @@ export const examRepository = {
   async studentExams() {
     const { data } = await envelope<ApiExam[]>("/v1/student/exams");
     return data.map(mapExam);
+  },
+  async attemptHistory() {
+    const { data } = await envelope<ApiAttemptHistory[]>(
+      "/v1/student/attempts/history",
+    );
+    return data;
   },
   async startAttempt(examId: string) {
     const { data } = await envelope<ApiAttempt>(

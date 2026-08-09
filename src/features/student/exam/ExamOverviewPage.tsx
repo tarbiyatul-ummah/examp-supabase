@@ -104,6 +104,11 @@ export function ExamOverviewPage() {
                 <li>Jawaban tersimpan otomatis.</li>
                 <li>Waktu dan status mengikuti server.</li>
                 <li>
+                  {exam.allowReattempt
+                    ? "Ujian ini dapat dikerjakan ulang; setiap nilai tersimpan di histori."
+                    : "Ujian ini hanya dapat dikerjakan satu kali."}
+                </li>
+                <li>
                   {manual
                     ? "Nilai akan tampil setelah diperiksa oleh admin."
                     : "Nilai tampil langsung setelah kamu selesai."}

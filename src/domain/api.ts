@@ -37,6 +37,7 @@ export type ApiExam = {
   targetGrades: number[];
   gradingMode: "instant_result" | "manual_review";
   shuffleOptions: boolean;
+  allowReattempt: boolean;
   status: "draft" | "published" | "archived";
   currentVersion: number;
   questionCount: number;
@@ -91,6 +92,7 @@ export type ApiAnswer = {
 
 export type ApiAttempt = {
   id: string;
+  attemptNo: number;
   examId: string;
   examVersionId: string;
   studentId: string;
@@ -121,6 +123,18 @@ export type ApiAttempt = {
     question?: ApiQuestion;
   }>;
   answers?: ApiAnswer[];
+};
+
+export type ApiAttemptHistory = {
+  id: string;
+  examId: string;
+  examName: string;
+  attemptNo: number;
+  status: "submitted" | "time_expired";
+  gradingStatus?: ApiAttempt["gradingStatus"];
+  score?: number;
+  activeElapsedSeconds: number;
+  submittedAt: string;
 };
 
 export type ApiMonitoringRow = {

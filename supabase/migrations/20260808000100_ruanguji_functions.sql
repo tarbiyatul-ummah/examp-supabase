@@ -633,16 +633,38 @@ declare
   v_version public.exam_versions%rowtype;
   v_attempt_id uuid;
   v_attempt_no integer;
+  v_current_attempt public.attempts%rowtype;
+  v_allow_reattempt boolean;
 begin
   if v_student_id is null then raise exception using errcode = '42501', message = 'Akses peserta ditolak.'; end if;
   select * into v_assignment from public.exam_assignments
   where exam_id = p_exam_id and student_id = v_student_id and revoked_at is null for update;
   if not found then raise exception using errcode = '42501', message = 'Peserta tidak memiliki assignment ujian ini.'; end if;
 
-  select a.id into v_attempt_id from public.attempts a
-  where a.assignment_id = v_assignment.id and (a.is_current or a.idempotency_key = p_idempotency_key)
-  order by a.attempt_no desc limit 1;
+  select a.id into v_attempt_id
+  from public.attempts a
+  where a.assignment_id = v_assignment.id
+    and a.idempotency_key = p_idempotency_key;
   if v_attempt_id is not null then return v_attempt_id; end if;
+
+  select * into v_current_attempt
+  from public.attempts
+  where assignment_id = v_assignment.id and is_current
+  for update;
+  if found then
+    select allow_reattempt into v_allow_reattempt
+    from public.exams
+    where id = p_exam_id;
+
+    if coalesce(v_allow_reattempt, false)
+      and v_current_attempt.status in ('submitted', 'time_expired') then
+      update public.attempts
+      set is_current = false
+      where id = v_current_attempt.id;
+    else
+      return v_current_attempt.id;
+    end if;
+  end if;
 
   select ev.* into v_version from public.exam_versions ev
   join public.exams e on e.id = ev.exam_id
@@ -981,7 +1003,11 @@ begin
     where id = p_attempt_id returning * into v_attempt;
   end if;
   insert into public.attempt_events(attempt_id, type, actor_id)
-  values (p_attempt_id, case when p_terminal_status = 'submitted' then 'submitted' else 'time_expired' end, auth.uid());
+  values (
+    p_attempt_id,
+    (case when p_terminal_status = 'submitted' then 'submitted' else 'time_expired' end)::public.attempt_event_type,
+    auth.uid()
+  );
   return v_attempt;
 end
 $$;
@@ -999,7 +1025,7 @@ begin
   if v_attempt.status not in ('in_progress', 'paused_disconnected') then return v_attempt; end if;
   if v_attempt.status = 'in_progress' then v_attempt := public.reconcile_attempt_clock(p_attempt_id); end if;
   return public.finalize_attempt(p_attempt_id,
-    case when v_attempt.active_elapsed_seconds >= v_attempt.duration_seconds then 'time_expired' else 'submitted' end);
+    (case when v_attempt.active_elapsed_seconds >= v_attempt.duration_seconds then 'time_expired' else 'submitted' end)::public.attempt_status);
 end
 $$;
 

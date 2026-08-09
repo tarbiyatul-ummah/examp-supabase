@@ -260,6 +260,7 @@ export function mapExam(exam: ApiExam, index = 0): Exam {
     averageScore: exam.averageScore,
     activeAttempts: exam.activeAttemptCount,
     completedAttempts: exam.completedAttemptCount,
+    allowReattempt: exam.allowReattempt,
     publishedAt:
       exam.status === "published"
         ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium" }).format(

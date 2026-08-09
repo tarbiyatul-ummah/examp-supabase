@@ -110,6 +110,7 @@ export const exams: Exam[] = [
     grades: [8],
     phase: "D",
     version: 2,
+    allowReattempt: true,
     publishedAt: "8 Agustus 2026",
   },
   {
@@ -129,6 +130,7 @@ export const exams: Exam[] = [
     grades: [8],
     phase: "D",
     version: 1,
+    allowReattempt: false,
     publishedAt: "8 Agustus 2026",
   },
   {
@@ -147,6 +149,7 @@ export const exams: Exam[] = [
     grades: [8],
     phase: "D",
     version: 1,
+    allowReattempt: false,
   },
   {
     id: "ips-8",
@@ -164,6 +167,7 @@ export const exams: Exam[] = [
     grades: [8],
     phase: "D",
     version: 1,
+    allowReattempt: false,
     publishedAt: "2 Agustus 2026",
   },
 ];

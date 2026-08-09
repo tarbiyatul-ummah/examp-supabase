@@ -146,6 +146,7 @@ create table public.exams (
   target_grades smallint[] not null default '{}'::smallint[],
   grading_mode public.grading_mode not null,
   shuffle_questions boolean not null default true,
+  allow_reattempt boolean not null default false,
   status public.exam_status not null default 'draft',
   current_version integer not null default 0 check (current_version >= 0),
   created_by uuid not null references public.profiles(id) on delete restrict,

@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   FileText,
   Plus,
+  RotateCcw,
   Send,
   Sparkles,
   Trash2,
@@ -84,6 +85,7 @@ export function ExamEditorPage() {
   const [grades, setGrades] = useState<number[]>([8]);
   const [gradeMenuOpen, setGradeMenuOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("instant");
+  const [allowReattempt, setAllowReattempt] = useState(false);
   const [questions, setQuestions] = useState<DraftQuestion[]>([newQuestion()]);
   const [activeId, setActiveId] = useState(questions[0].clientId);
   const [students, setStudents] = useState<Student[]>([]);
@@ -151,6 +153,7 @@ export function ExamEditorPage() {
           : [gradesForLevel[nextLevel][0]],
       );
       setMode(exam.gradingMode === "manual_review" ? "manual" : "instant");
+      setAllowReattempt(exam.allowReattempt);
     });
   }, [id]);
 
@@ -199,6 +202,7 @@ export function ExamEditorPage() {
     targetGrades: grades,
     gradingMode: mode === "manual" ? "manual_review" : "instant_result",
     shuffleOptions: true,
+    allowReattempt,
   };
 
   const validateInformation = () => {
@@ -500,6 +504,23 @@ export function ExamEditorPage() {
                 </div>
               </button>
             </div>
+            <label className="exam-policy-toggle">
+              <input
+                type="checkbox"
+                checked={allowReattempt}
+                onChange={(event) => setAllowReattempt(event.target.checked)}
+              />
+              <span className="exam-policy-icon">
+                <RotateCcw />
+              </span>
+              <span className="exam-policy-copy">
+                <strong>Izinkan peserta mengerjakan ulang</strong>
+                <small>
+                  Setelah ujian selesai, peserta dapat memulai attempt baru.
+                  Semua nilai sebelumnya tetap tersimpan di histori.
+                </small>
+              </span>
+            </label>
           </div>
           <div className="editor-actions">
             <Link to="/admin/exams" className="button secondary">
@@ -845,6 +866,15 @@ export function ExamEditorPage() {
                 <div>
                   <strong>{selected.length} peserta</strong>
                   <small>Akan menerima assignment ujian.</small>
+                </div>
+              </div>
+              <div className="validation-item">
+                <RotateCcw />
+                <div>
+                  <strong>
+                    Re-attempt {allowReattempt ? "diizinkan" : "dinonaktifkan"}
+                  </strong>
+                  <small>Histori attempt lama tidak akan dihapus.</small>
                 </div>
               </div>
               <button

@@ -48,6 +48,7 @@ export type Exam = {
   averageScore?: number;
   activeAttempts?: number;
   completedAttempts?: number;
+  allowReattempt: boolean;
 };
 
 export type Question = {

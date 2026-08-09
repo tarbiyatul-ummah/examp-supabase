@@ -3,7 +3,13 @@ import {
   CalendarDays,
   ClipboardCheck,
   Clock3,
+  Divide,
+  FileText,
+  History,
   ListChecks,
+  Plus,
+  Quote,
+  Sigma,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -11,6 +17,7 @@ import { Link } from "react-router-dom";
 import { StudentHeader } from "../../../components/layout";
 import { Brand } from "../../../components/ui";
 import type { Exam } from "../../../domain/models";
+import type { ApiAttemptHistory } from "../../../domain/api";
 import { appConfig } from "../../../config/appConfig";
 import { authRepository, examRepository } from "../../../repositories";
 
@@ -19,12 +26,18 @@ export function StudentHomePage() {
     shortName: "Peserta",
   };
   const [exams, setExams] = useState<Exam[]>([]);
+  const [history, setHistory] = useState<ApiAttemptHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   useEffect(() => {
-    examRepository
-      .studentExams()
-      .then(setExams)
+    Promise.all([
+      examRepository.studentExams(),
+      examRepository.attemptHistory(),
+    ])
+      .then(([examItems, historyItems]) => {
+        setExams(examItems);
+        setHistory(historyItems);
+      })
       .catch((cause: Error) => setError(cause.message))
       .finally(() => setLoading(false));
   }, []);
@@ -71,8 +84,20 @@ export function StudentHomePage() {
                   <span className="date-badge">
                     <CalendarDays /> Tersedia sekarang
                   </span>
-                  <div className="cover-symbol">{manual ? "Aa" : "∑"}</div>
-                  <div className="cover-dots">{manual ? "“ ”" : "÷ × +"}</div>
+                  <div className="cover-symbol" aria-hidden="true">
+                    {manual ? <FileText /> : <Sigma />}
+                  </div>
+                  <div className="cover-dots" aria-hidden="true">
+                    {manual ? (
+                      <Quote />
+                    ) : (
+                      <>
+                        <Divide />
+                        <X />
+                        <Plus />
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div className="student-exam-body">
                   <p>{exam.subject.toUpperCase()}</p>
@@ -110,6 +135,47 @@ export function StudentHomePage() {
         {!loading && !error && exams.length === 0 && (
           <section className="panel">
             <p>Belum ada ujian yang ditugaskan untukmu.</p>
+          </section>
+        )}
+        {!loading && !error && history.length > 0 && (
+          <section className="student-history-section">
+            <div className="student-section-title">
+              <div>
+                <h2>Histori pengerjaan</h2>
+                <p>Nilai dan detail jawaban dari setiap attempt yang selesai.</p>
+              </div>
+              <span>{history.length} attempt</span>
+            </div>
+            <div className="past-exams">
+              {history.map((attempt) => (
+                <article className="past-exam-row" key={attempt.id}>
+                  <span className="past-icon purple">
+                    <History />
+                  </span>
+                  <div>
+                    <strong>{attempt.examName}</strong>
+                    <small>
+                      Attempt {attempt.attemptNo} ·{" "}
+                      {new Intl.DateTimeFormat("id-ID", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      }).format(new Date(attempt.submittedAt))}
+                    </small>
+                  </div>
+                  <span className="score-pill">
+                    {typeof attempt.score === "number"
+                      ? attempt.score
+                      : "Menunggu"}
+                  </span>
+                  <Link
+                    to={`/student/result/${attempt.id}`}
+                    aria-label={`Lihat hasil ${attempt.examName} attempt ${attempt.attemptNo}`}
+                  >
+                    <ArrowRight />
+                  </Link>
+                </article>
+              ))}
+            </div>
           </section>
         )}
         <section className="student-tip">

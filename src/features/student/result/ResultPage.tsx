@@ -1,7 +1,16 @@
-import { Check, Circle, Clock3, Home } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Circle,
+  Clock3,
+  Home,
+  ListChecks,
+  X,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { StudentHeader } from "../../../components/layout";
+import { documentText } from "../../../repositories/mappers";
 import type { ApiAttempt } from "../../../domain/api";
 import type { Exam } from "../../../domain/models";
 import { authRepository, examRepository } from "../../../repositories";
@@ -11,6 +20,7 @@ export function ResultPage() {
   const [result, setResult] = useState<ApiAttempt | null>(null);
   const [exam, setExam] = useState<Exam | null>(null);
   const [error, setError] = useState("");
+  const [detailsOpen, setDetailsOpen] = useState(true);
   const currentStudent = authRepository.session()?.profile || {
     shortName: "Peserta",
   };
@@ -49,7 +59,9 @@ export function ResultPage() {
       </div>
     );
   const released = typeof result.score === "number";
-  const answered = result.answers?.length || 0;
+  const hasAnswer = (answer: NonNullable<ApiAttempt["answers"]>[number]) =>
+    Boolean(answer.selectedOptionId || answer.textRaw?.trim());
+  const answered = (result.answers || []).filter(hasAnswer).length;
   const total = result.questions?.length || answered;
   const duration = Math.max(0, result.activeElapsedSeconds);
   const durationText = `${Math.floor(duration / 60)}m ${duration % 60}d`;
@@ -116,6 +128,84 @@ export function ResultPage() {
               <small>Durasi aktif</small>
             </p>
           </div>
+        </section>
+        <section className="result-details">
+          <button
+            type="button"
+            className="result-details-head"
+            aria-expanded={detailsOpen}
+            onClick={() => setDetailsOpen((open) => !open)}
+          >
+            <div>
+              <span>
+                <ListChecks />
+              </span>
+              <div>
+                <h2>Detail pengerjaan attempt {result.attemptNo}</h2>
+                <p>Lihat jawaban dan hasil penilaian setiap soal.</p>
+              </div>
+            </div>
+            <ChevronDown className={detailsOpen ? "rotated" : ""} />
+          </button>
+          {detailsOpen && (
+            <div className="result-answer-list">
+              {(result.questions || []).map((item, index) => {
+                const answer = (result.answers || []).find(
+                  (candidate) => candidate.questionId === item.questionId,
+                );
+                const option = item.question?.options?.find(
+                  (candidate) => candidate.id === answer?.selectedOptionId,
+                );
+                const answerText = option
+                  ? documentText(option.contentDoc)
+                  : answer?.textRaw?.trim() || "Tidak dijawab";
+                const verdict = answer?.verdict;
+                const answeredQuestion = answer ? hasAnswer(answer) : false;
+                return (
+                  <div key={item.questionId}>
+                    <span
+                      className={
+                        !answeredQuestion
+                          ? "gray"
+                          : verdict === "correct"
+                          ? "green"
+                          : verdict === "incorrect"
+                            ? "orange"
+                            : "gray"
+                      }
+                    >
+                      {!answeredQuestion ? (
+                        <Circle />
+                      ) : verdict === "correct" ? (
+                        <Check />
+                      ) : verdict === "incorrect" ? (
+                        <X />
+                      ) : (
+                        <Circle />
+                      )}
+                    </span>
+                    <p>
+                      <strong>
+                        Soal {index + 1} ·{" "}
+                        {documentText(item.question?.contentDoc || {}) ||
+                          "Pertanyaan"}
+                      </strong>
+                      <small>
+                        Jawabanmu: {answerText} ·{" "}
+                        {!answeredQuestion
+                          ? "Tidak dijawab"
+                          : verdict === "correct"
+                          ? "Benar"
+                          : verdict === "incorrect"
+                            ? "Salah"
+                            : "Menunggu koreksi"}
+                      </small>
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
         <div className="result-actions">
           <Link to="/student" className="button primary">

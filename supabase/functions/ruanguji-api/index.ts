@@ -256,6 +256,7 @@ function mapExam(
     targetGrades: row.target_grades ?? [],
     gradingMode: row.grading_mode,
     shuffleOptions: row.shuffle_questions,
+    allowReattempt: Boolean(row.allow_reattempt),
     status: row.status,
     currentVersion: row.current_version,
     questionCount,
@@ -594,6 +595,7 @@ async function attemptSnapshot(
       );
   return {
     id: attempt.id,
+    attemptNo: Number(attempt.attempt_no),
     examId: assignment.exam_id,
     examVersionId: attempt.exam_version_id,
     studentId: assignment.student_id,
@@ -1011,6 +1013,7 @@ async function handle(request: Request) {
       target_grades: input.targetGrades ?? [],
       grading_mode: input.gradingMode,
       shuffle_questions: input.shuffleQuestions ?? input.shuffleOptions ?? true,
+      allow_reattempt: Boolean(input.allowReattempt),
       created_by: auth.user.id,
     };
     const exam = dataOrThrow<any>(
@@ -1034,6 +1037,7 @@ async function handle(request: Request) {
       gradingMode: "grading_mode",
       shuffleQuestions: "shuffle_questions",
       shuffleOptions: "shuffle_questions",
+      allowReattempt: "allow_reattempt",
     };
     const patch: Record<string, unknown> = {};
     for (const [source, target] of Object.entries(fields))
@@ -1325,6 +1329,70 @@ async function handle(request: Request) {
     return json(request, await examsWithCounts(exams));
   }
 
+  if (path === "/v1/student/attempts/history" && method === "GET") {
+    const auth = await actor(request, ["student"]);
+    const student = await studentForUser(auth.user.id);
+    const assignments = dataOrThrow<any[]>(
+      await service
+        .from("exam_assignments")
+        .select("id,exam_id")
+        .eq("student_id", student.id),
+    );
+    if (!assignments.length) return json(request, []);
+
+    const attempts = dataOrThrow<any[]>(
+      await service
+        .from("attempts")
+        .select("*")
+        .in(
+          "assignment_id",
+          assignments.map((assignment) => assignment.id),
+        )
+        .in("status", ["submitted", "time_expired"])
+        .order("submitted_at", { ascending: false }),
+    );
+    if (!attempts.length) return json(request, []);
+
+    const exams = dataOrThrow<any[]>(
+      await service
+        .from("exams")
+        .select("id,name")
+        .in(
+          "id",
+          [...new Set(assignments.map((assignment) => assignment.exam_id))],
+        ),
+    );
+    const assignmentById = new Map(
+      assignments.map((assignment) => [assignment.id, assignment]),
+    );
+    const examById = new Map(exams.map((exam) => [exam.id, exam]));
+
+    return json(
+      request,
+      attempts.map((attempt) => {
+        const assignment = assignmentById.get(attempt.assignment_id);
+        const exam = examById.get(assignment?.exam_id);
+        const scoreReleased = ["auto_scored", "released"].includes(
+          attempt.grading_status,
+        );
+        return {
+          id: attempt.id,
+          examId: assignment?.exam_id,
+          examName: exam?.name ?? "Ujian",
+          attemptNo: Number(attempt.attempt_no),
+          status: attempt.status,
+          gradingStatus: attempt.grading_status ?? undefined,
+          score:
+            scoreReleased && attempt.score !== null
+              ? Number(attempt.score)
+              : undefined,
+          activeElapsedSeconds: Number(attempt.active_elapsed_seconds),
+          submittedAt: attempt.submitted_at,
+        };
+      }),
+    );
+  }
+
   match = path.match(/^\/v1\/student\/exams\/([^/]+)\/attempts$/);
   if (match && method === "POST") {
     const auth = await actor(request, ["student"]);
@@ -1413,9 +1481,11 @@ async function handle(request: Request) {
     if (!["submitted", "time_expired"].includes(access.attempt.status)) {
       throw new HttpError(409, "result_unavailable", "Ujian belum selesai.");
     }
-    const snapshot = await attemptSnapshot(match[1]);
-    if (!["auto_scored", "released"].includes(access.attempt.grading_status))
+    const snapshot = await attemptSnapshot(match[1], false, true);
+    if (!["auto_scored", "released"].includes(access.attempt.grading_status)) {
       delete snapshot.score;
+      for (const answer of snapshot.answers ?? []) delete answer.verdict;
+    }
     return json(request, snapshot);
   }
 
