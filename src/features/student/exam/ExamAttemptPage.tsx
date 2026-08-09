@@ -81,12 +81,15 @@ export function ExamAttemptPage() {
   const [answers, setAnswers] = useState<Record<string, LocalAnswer>>({});
   const answersRef = useRef(answers);
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const saveRequests = useRef<Partial<Record<string, Promise<boolean>>>>({});
   const [remaining, setRemaining] = useState(0);
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error">(
     "saved",
   );
   const [showNavigator, setShowNavigator] = useState(false);
   const [showSubmit, setShowSubmit] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [offline, setOffline] = useState(!navigator.onLine);
   const [reconnecting, setReconnecting] = useState(false);
   const [error, setError] = useState("");
@@ -163,31 +166,46 @@ export function ExamAttemptPage() {
     };
   }, [attempt, navigate]);
 
-  const persistAnswer = async (questionId: string) => {
-    if (!attempt) return;
+  const persistAnswer = async (questionId: string): Promise<boolean> => {
+    if (!attempt) return false;
+    if (saveRequests.current[questionId]) {
+      return saveRequests.current[questionId];
+    }
     const local = answersRef.current[questionId];
-    if (!local) return;
+    if (!local) return true;
+    const request = (async () => {
+      try {
+        const multipleChoice =
+          examQuestions.find((item) => item.id === questionId)?.type ===
+          "Pilihan ganda";
+        const saved = await examRepository.saveAnswer(attempt.id, questionId, {
+          selectedOptionId: multipleChoice ? local.selectedOptionId : null,
+          textRaw: multipleChoice ? null : local.value,
+          version: local.version,
+        });
+        const updated = {
+          ...answersRef.current,
+          [questionId]: {
+            ...answersRef.current[questionId],
+            version: saved.version,
+          },
+        };
+        answersRef.current = updated;
+        setAnswers(updated);
+        setSaveState("saved");
+        return true;
+      } catch {
+        setSaveState("error");
+        return false;
+      }
+    })();
+    saveRequests.current[questionId] = request;
     try {
-      const multipleChoice =
-        examQuestions.find((item) => item.id === questionId)?.type ===
-        "Pilihan ganda";
-      const saved = await examRepository.saveAnswer(attempt.id, questionId, {
-        selectedOptionId: multipleChoice ? local.selectedOptionId : null,
-        textRaw: multipleChoice ? null : local.value,
-        version: local.version,
-      });
-      const updated = {
-        ...answersRef.current,
-        [questionId]: {
-          ...answersRef.current[questionId],
-          version: saved.version,
-        },
-      };
-      answersRef.current = updated;
-      setAnswers(updated);
-      setSaveState("saved");
-    } catch {
-      setSaveState("error");
+      return await request;
+    } finally {
+      if (saveRequests.current[questionId] === request) {
+        delete saveRequests.current[questionId];
+      }
     }
   };
 
@@ -223,21 +241,41 @@ export function ExamAttemptPage() {
     }
   };
   const submit = async () => {
-    if (!attempt) return;
-    await Promise.all(
-      Object.keys(saveTimers.current).map(async (key) => {
-        clearTimeout(saveTimers.current[key]);
-        await persistAnswer(key);
-      }),
-    );
-    const completed = await examRepository.submit(attempt.id);
-    setShowSubmit(false);
-    navigate(
-      completed.gradingStatus === "pending_review"
-        ? "/student/status/waiting-review"
-        : `/student/result/${completed.id}`,
-      { replace: true },
-    );
+    if (!attempt || submitting) return;
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      Object.values(saveTimers.current).forEach(clearTimeout);
+      saveTimers.current = {};
+
+      await Promise.all(Object.values(saveRequests.current));
+
+      const saveResults = await Promise.all(
+        Object.keys(answersRef.current).map(persistAnswer),
+      );
+      if (saveResults.some((saved) => !saved)) {
+        throw new Error(
+          "Sebagian jawaban belum tersimpan. Periksa koneksi lalu coba kumpulkan lagi.",
+        );
+      }
+
+      const completed = await examRepository.submit(attempt.id);
+      setShowSubmit(false);
+      navigate(
+        completed.gradingStatus === "pending_review"
+          ? "/student/status/waiting-review"
+          : `/student/result/${completed.id}`,
+        { replace: true },
+      );
+    } catch (cause) {
+      setSubmitError(
+        cause instanceof ApiError || cause instanceof Error
+          ? cause.message
+          : "Ujian belum berhasil dikumpulkan. Silakan coba lagi.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (error)
@@ -457,8 +495,13 @@ export function ExamAttemptPage() {
         <SubmitExamModal
           answered={Object.keys(answers).length}
           total={examQuestions.length}
-          onClose={() => setShowSubmit(false)}
-          onSubmit={() => void submit()}
+          onClose={() => {
+            setShowSubmit(false);
+            setSubmitError("");
+          }}
+          onSubmit={submit}
+          submitting={submitting}
+          error={submitError}
         />
       )}
       {offline && (

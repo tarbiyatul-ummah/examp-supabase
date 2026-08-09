@@ -2,9 +2,15 @@ import {
   ArrowLeft,
   ClipboardCheck,
   Clock3,
+  Divide,
+  FileText,
   ListChecks,
   Play,
+  Plus,
+  Quote,
   ShieldCheck,
+  Sigma,
+  X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -45,8 +51,20 @@ export function ExamOverviewPage() {
           <div
             className={`exam-overview-cover ${manual ? "orange-cover" : "purple-cover"}`}
           >
-            <div className="cover-symbol">{manual ? "Aa" : "∑"}</div>
-            <div className="cover-dots">{manual ? "“ ”" : "÷ × +"}</div>
+            <div className="cover-symbol" aria-hidden="true">
+              {manual ? <FileText /> : <Sigma />}
+            </div>
+            <div className="cover-dots" aria-hidden="true">
+              {manual ? (
+                <Quote />
+              ) : (
+                <>
+                  <Divide />
+                  <X />
+                  <Plus />
+                </>
+              )}
+            </div>
           </div>
           <div className="exam-overview-copy">
             <p>

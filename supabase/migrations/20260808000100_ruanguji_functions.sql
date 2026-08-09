@@ -550,7 +550,10 @@ begin
     raise exception using errcode = '23514', message = 'Ujian harus memiliki minimal satu soal.';
   end if;
 
-  select string_agg(format('Soal %s: %s', q.position, problem), E'\n' order by q.position)
+  select string_agg(
+    format('Soal %s: %s', validation.position, validation.problem),
+    E'\n' order by validation.position
+  )
   into v_error
   from (
     select q.position,
@@ -566,7 +569,7 @@ begin
           then 'isian panjang tidak diizinkan pada mode nilai langsung'
       end as problem
     from public.questions q where q.exam_version_id = v_version.id
-  ) invalid where problem is not null;
+  ) validation where validation.problem is not null;
   if v_error is not null then raise exception using errcode = '23514', message = v_error; end if;
 
   select encode(extensions.digest(convert_to(jsonb_build_object(

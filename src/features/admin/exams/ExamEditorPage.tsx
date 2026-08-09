@@ -779,7 +779,7 @@ export function ExamEditorPage() {
               })}
             </div>
           </div>
-          <div className="editor-actions">
+          <div className="sticky-builder-footer assignment-sticky-footer">
             <button
               type="button"
               className="button secondary"

@@ -6,11 +6,15 @@ export function SubmitExamModal({
   total,
   onClose,
   onSubmit,
+  submitting = false,
+  error = "",
 }: {
   answered: number;
   total: number;
   onClose: () => void;
-  onSubmit: () => void;
+  onSubmit: () => void | Promise<void>;
+  submitting?: boolean;
+  error?: string;
 }) {
   const [confirmed, setConfirmed] = useState(false);
   return (
@@ -50,6 +54,12 @@ export function SubmitExamModal({
             </span>
           </div>
         )}
+        {error && (
+          <div className="submit-error" role="alert">
+            <AlertTriangle />
+            <span>{error}</span>
+          </div>
+        )}
         <label className="checkbox-row">
           <input
             type="checkbox"
@@ -59,15 +69,19 @@ export function SubmitExamModal({
           <span>Saya yakin ingin mengumpulkan ujian ini.</span>
         </label>
         <div className="modal-footer">
-          <button className="button secondary" onClick={onClose}>
+          <button
+            className="button secondary"
+            onClick={onClose}
+            disabled={submitting}
+          >
             Periksa lagi
           </button>
           <button
             className="button primary"
-            disabled={!confirmed}
-            onClick={onSubmit}
+            disabled={!confirmed || submitting}
+            onClick={() => void onSubmit()}
           >
-            <Send /> Kumpulkan ujian
+            <Send /> {submitting ? "Mengumpulkan..." : "Kumpulkan ujian"}
           </button>
         </div>
       </div>

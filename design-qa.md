@@ -1,12 +1,12 @@
 # Design QA
 
-- Source visual truth: screenshot editor soal yang dilampirkan pengguna pada percakapan (tidak tersedia sebagai path filesystem lokal).
-- Implementation screenshot: tidak tersedia; in-app browser mengembalikan `No browser is available`.
-- Intended viewport: desktop, panel penyusunan soal selebar container sesuai screenshot sumber terbaru.
-- Source dimensions: screenshot percakapan terbaru sekitar 1252 × 768 px.
+- Source visual truth: dua screenshot pengguna pada percakapan—overview ujian peserta dan modal konfirmasi pengumpulan (tidak tersedia sebagai file lokal).
+- Implementation screenshot: tidak tersedia; koneksi in-app browser mengembalikan `No browser is available`.
+- Intended viewport: desktop, sekitar 1416 × 852 px untuk overview dan 1416 × 640 px untuk modal.
+- Source dimensions: sekitar 1416 × 852 px dan 1416 × 640 px.
 - Implementation dimensions: tidak dapat diukur.
 - Density normalization: tidak dapat dilakukan tanpa capture implementasi.
-- State: langkah Susun soal, panel kanan diharapkan mengisi seluruh ruang setelah sidebar daftar soal.
+- State: overview sebelum mulai dan modal konfirmasi setelah seluruh soal dijawab.
 
 ## Full-view comparison evidence
 
@@ -14,25 +14,34 @@ Tidak dapat dilakukan karena browser-rendered implementation screenshot tidak te
 
 ## Focused region comparison evidence
 
-Tidak dapat dilakukan. Region yang perlu dibandingkan adalah toolbar format, area contenteditable, tombol sisipkan gambar, dan footer batas file.
+Tidak dapat dilakukan. Region yang harus dibandingkan adalah posisi ilustrasi sampul, lebar/rata kiri kartu informasi, lebar modal, alignment statistik, error submit, dan breakpoint mobile.
+
+## Required fidelity surfaces
+
+- Typography: token tipografi aplikasi dipertahankan; tidak dapat dibandingkan secara visual.
+- Spacing/layout: page dan card dibuat fill-container dalam batas 1200 px; copy, statistik, dan instruction box dibuat 100% serta rata kiri.
+- Colors/tokens: warna dan semantic tokens aplikasi dipertahankan.
+- Image quality/assets: glyph dekoratif diganti dengan ikon Lucide dan dikunci di dalam cover yang memiliki positioning context sendiri.
+- Copy/content: teks overview dan konfirmasi dipertahankan; state `Mengumpulkan...` dan pesan error ditambahkan untuk feedback aksi.
 
 ## Findings
 
-- [Blocked] QA visual fill-container dan interaksi browser belum dapat diverifikasi.
+- [Blocked] QA visual dan interaksi submit belum dapat diverifikasi di browser.
   - Evidence: koneksi in-app browser tidak tersedia pada sesi ini.
-  - Remaining checks: panel kanan tidak menyisakan kolom kosong pada desktop, render mobile, toolbar WYSIWYG, dan console errors.
+  - Remaining checks: tidak ada overlap cover/title, ukuran desktop/mobile, refresh deep-link, submit success/error, fokus keyboard, dan console errors.
 
 ## Code/build checks completed
 
 - TypeScript dan production build berhasil.
-- Konten rich text diserialisasi sebagai dokumen terstruktur, bukan HTML mentah.
-- Gambar tetap melewati validasi 2,5 MB di client, Edge Function, bucket, dan database.
-- Renderer peserta dan koreksi mendukung paragraf, bold, italic, underline, list, dan banyak gambar.
-- Grid penyusunan soal menggunakan dua kolom nyata (`sidebar + editor`), dan seluruh input panel kanan diatur `width: 100%`.
+- Cover sekarang memiliki `position: relative` dan `overflow: hidden`, sehingga ornamen absolut tidak dapat keluar ke area judul.
+- Overview, info cards, instruction box, dan submit stats mengisi container serta rata kiri.
+- Submit mengosongkan timer, menyimpan ulang semua jawaban, mencegah double-submit, dan menampilkan error backend.
+- SPA fallback tersedia untuk Vercel (`vercel.json`) serta host berbasis `_redirects` (`public/_redirects`).
 
 ## Comparison history
 
-- Initial pass: blocked sebelum capture karena tidak ada browser yang tersedia.
-- Fill-container pass: kolom grid kosong 280px dihapus dan semua konten editor dibuat stretch; capture pembanding tetap terblokir.
+- Initial evidence: simbol sigma keluar dari panel ungu dan menimpa judul; stat cards tidak terasa fill-container/rata kiri; submit tidak memberi feedback saat gagal.
+- Implementation pass: positioning cover diperbaiki, glyph diganti ikon, ukuran container diperluas, alignment dirapikan, dan submit dibuat observable serta retry-safe.
+- Post-fix evidence: capture pembanding terblokir karena browser tidak tersedia.
 
 final result: blocked

@@ -15,7 +15,8 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { AdminShell } from "../../../components/layout";
 import { Avatar, PageToolbar, StatusPill, Toast, ToastMessage } from "../../../components/ui";
@@ -88,6 +89,9 @@ export function StudentsPage() {
   const [total, setTotal] = useState(0);
   const [selectedIds, setSelectedIds] = useState<Set<EntityId>>(new Set());
   const [openMenuId, setOpenMenuId] = useState<EntityId | null>(null);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const rowMenuRef = useRef<HTMLDivElement>(null);
+  const rowMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const [showModal, setShowModal] = useState(searchParams.get("create") === "1");
   const [toast, setToast] = useState<Toast | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,6 +122,30 @@ export function StudentsPage() {
   useEffect(() => { const timer = setTimeout(() => void loadStudents(), search ? 300 : 0); return () => clearTimeout(timer); }, [loadStudents, search]);
   useEffect(() => { void loadSummary(); }, [loadSummary]);
   useEffect(() => { setPage(1); }, [gradeFilter, levelFilter, search, statusTab]);
+  useEffect(() => {
+    if (openMenuId === null) return;
+    const close = () => setOpenMenuId(null);
+    const closeOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        !rowMenuRef.current?.contains(target) &&
+        !rowMenuTriggerRef.current?.contains(target)
+      ) close();
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("mousedown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("mousedown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [openMenuId]);
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
@@ -161,6 +189,27 @@ export function StudentsPage() {
   };
 
   const pageNumbers = Array.from({ length: pageCount }, (_, index) => index + 1).filter((value) => Math.abs(value - page) <= 2);
+  const menuStudent = students.find((student) => student.id === openMenuId);
+  const toggleRowMenu = (studentId: EntityId, trigger: HTMLButtonElement) => {
+    if (openMenuId === studentId) {
+      setOpenMenuId(null);
+      return;
+    }
+    const rect = trigger.getBoundingClientRect();
+    const menuWidth = 210;
+    const menuHeight = 108;
+    const gap = 7;
+    const left = Math.min(
+      window.innerWidth - menuWidth - 10,
+      Math.max(10, rect.right - menuWidth),
+    );
+    const top = rect.bottom + gap + menuHeight <= window.innerHeight
+      ? rect.bottom + gap
+      : Math.max(10, rect.top - menuHeight - gap);
+    rowMenuTriggerRef.current = trigger;
+    setMenuPosition({ top, left });
+    setOpenMenuId(studentId);
+  };
   return (
     <AdminShell title="Peserta" subtitle="Kelola data dan kode akses peserta." action={<button className="button primary desktop-action" onClick={() => setShowModal(true)}><Plus /> Tambah peserta</button>}>
       {toast && <ToastMessage toast={toast} onClose={() => setToast(null)} />}
@@ -203,13 +252,13 @@ export function StudentsPage() {
                   <td>{student.assigned} ujian</td><td><StatusPill>{student.status}</StatusPill></td>
                   <td>
                     <div className="row-actions">
-                      <button className="icon-button" title="Aksi peserta" onClick={() => setOpenMenuId((current) => current === student.id ? null : student.id)}><MoreHorizontal /></button>
-                      {openMenuId === student.id && (
-                        <div className="row-action-menu">
-                          <button onClick={async () => { try { const code = await studentRepository.regenerateCode(String(student.id)); setStudents((current) => current.map((item) => item.id === student.id ? { ...item, code } : item)); setToast({ message: `Kode baru ${code} — simpan sekarang.` }); } catch (cause) { setToast({ message: cause instanceof ApiError ? cause.message : "Gagal membuat kode baru" }); } finally { setOpenMenuId(null); } }}>Buat kode login baru</button>
-                          <button onClick={async () => { try { const nextStatus = student.status === "Aktif" ? "inactive" : "active"; await studentRepository.update(String(student.id), { status: nextStatus }); await Promise.all([loadStudents(), loadSummary()]); setToast({ message: `${student.name} ${nextStatus === "active" ? "diaktifkan" : "dinonaktifkan"}` }); } catch (cause) { setToast({ message: cause instanceof ApiError ? cause.message : "Gagal mengubah status" }); } finally { setOpenMenuId(null); } }}>{student.status === "Aktif" ? "Nonaktifkan akun" : "Aktifkan akun"}</button>
-                        </div>
-                      )}
+                      <button
+                        className="icon-button"
+                        title="Aksi peserta"
+                        aria-haspopup="menu"
+                        aria-expanded={openMenuId === student.id}
+                        onClick={(event) => toggleRowMenu(student.id, event.currentTarget)}
+                      ><MoreHorizontal /></button>
                     </div>
                   </td>
                 </tr>
@@ -228,6 +277,18 @@ export function StudentsPage() {
       </section>
       <button className="fab" onClick={() => setShowModal(true)}><Plus /></button>
       {showModal && <StudentModal onClose={closeModal} onSave={addStudent} />}
+      {menuStudent && createPortal(
+        <div
+          ref={rowMenuRef}
+          className="row-action-menu row-action-menu-portal"
+          role="menu"
+          style={menuPosition}
+        >
+          <button role="menuitem" onClick={async () => { try { const code = await studentRepository.regenerateCode(String(menuStudent.id)); setStudents((current) => current.map((item) => item.id === menuStudent.id ? { ...item, code } : item)); setToast({ message: `Kode baru ${code} — simpan sekarang.` }); } catch (cause) { setToast({ message: cause instanceof ApiError ? cause.message : "Gagal membuat kode baru" }); } finally { setOpenMenuId(null); } }}>Buat kode login baru</button>
+          <button role="menuitem" onClick={async () => { try { const nextStatus = menuStudent.status === "Aktif" ? "inactive" : "active"; await studentRepository.update(String(menuStudent.id), { status: nextStatus }); await Promise.all([loadStudents(), loadSummary()]); setToast({ message: `${menuStudent.name} ${nextStatus === "active" ? "diaktifkan" : "dinonaktifkan"}` }); } catch (cause) { setToast({ message: cause instanceof ApiError ? cause.message : "Gagal mengubah status" }); } finally { setOpenMenuId(null); } }}>{menuStudent.status === "Aktif" ? "Nonaktifkan akun" : "Aktifkan akun"}</button>
+        </div>,
+        document.body,
+      )}
     </AdminShell>
   );
 }
