@@ -1,12 +1,12 @@
 # Design QA
 
-- Source visual truth: screenshot card ujian peserta yang dilampirkan pengguna pada percakapan (tidak tersedia sebagai file lokal).
-- Implementation screenshot: tidak tersedia; koneksi in-app browser mengembalikan `No browser is available`.
-- Intended viewport: desktop, crop card sekitar 664 × 394 px.
-- Source dimensions: sekitar 664 × 394 px.
+- Source visual truth: screenshot mode penilaian dan opsi re-attempt dari pengguna (tidak tersedia sebagai file lokal).
+- Implementation screenshot: tidak tersedia; in-app browser mengembalikan `No browser is available`.
+- Intended viewport: desktop, crop sekitar 1241 × 402 px.
+- Source dimensions: sekitar 1241 × 402 px.
 - Implementation dimensions: tidak dapat diukur.
 - Density normalization: tidak dapat dilakukan tanpa capture implementasi.
-- State: card ujian tersedia, histori attempt berisi nilai, dan detail hasil terbuka.
+- State: langkah Informasi ujian, mode Nilai langsung aktif, opsi re-attempt belum dicentang.
 
 ## Full-view comparison evidence
 
@@ -14,35 +14,32 @@ Tidak dapat dilakukan karena browser-rendered implementation screenshot tidak te
 
 ## Focused region comparison evidence
 
-Tidak dapat dilakukan. Region yang perlu dibandingkan adalah jarak metadata ke tombol card, posisi ikon cover, toggle re-attempt admin, daftar histori, dan detail jawaban per soal.
+Tidak dapat dilakukan. Region utama adalah alignment checkbox, ikon, judul, deskripsi, tinggi card, dan wrapping pada mobile.
 
 ## Required fidelity surfaces
 
-- Typography: token tipografi aplikasi dipertahankan; capture belum tersedia.
-- Spacing/layout: tombol card diberi jarak 20 px dari metadata; daftar histori dan detail jawaban memenuhi container.
-- Colors/tokens: warna teal, purple, orange, gray, border, dan surface memakai token aplikasi yang sudah ada.
-- Image quality/assets: glyph dekoratif card diganti ikon Lucide agar tidak mengalami mojibake dan tetap tajam.
-- Copy/content: opsi re-attempt, histori nilai, attempt number, status nilai, dan detail jawaban ditambahkan.
+- Typography: judul tetap bold; deskripsi kini memakai bobot normal dan token muted.
+- Spacing/layout: komponen re-attempt dipaksa menjadi flex row, fill-container, center vertically, dengan gap 12 px.
+- Colors/tokens: border, surface, ikon, dan teks memakai token aplikasi.
+- Image quality/assets: ikon RotateCcw dari library aplikasi dipertahankan.
+- Copy/content: tidak diubah.
 
 ## Findings
 
-- [Blocked] QA visual dan interaksi end-to-end belum dapat diverifikasi di browser.
-  - Evidence: koneksi in-app browser tidak tersedia pada sesi ini.
-  - Remaining checks: spacing card desktop/mobile, toggle admin tersimpan, attempt kedua tercipta, histori berurutan, detail jawaban, dan console errors.
+- [Blocked] QA visual pascaperbaikan belum dapat diverifikasi.
+  - Evidence: koneksi in-app browser tidak tersedia.
+  - Remaining checks: desktop, mobile wrapping, focus checkbox, dan console errors.
 
 ## Code/build checks completed
 
-- TypeScript dan production build berhasil.
-- Kebijakan `allow_reattempt` dikirim dari editor admin hingga database.
-- Attempt lama dipertahankan; attempt baru hanya otomatis diizinkan setelah status `submitted` atau `time_expired`.
-- Endpoint histori hanya mengembalikan attempt selesai milik peserta aktif.
-- Nilai dan verdict koreksi manual tidak dibuka sebelum status hasil `released`.
-- Card ujian memiliki spacing 20 px antara informasi dan tombol.
+- Penyebab ditemukan: selector global `.form-card > label` memiliki specificity lebih tinggi dan memaksa `display: block` serta font bold.
+- Selector diperbaiki menjadi `.form-card > label.exam-policy-toggle` agar layout horizontal diterapkan.
+- Production build berhasil.
 
 ## Comparison history
 
-- Initial evidence: tombol card terlalu dekat dengan metadata.
-- Implementation pass: margin atas tombol ditambah, ikon cover distabilkan, serta fitur re-attempt/histori dibangun mengikuti pola card aplikasi.
+- Initial evidence: checkbox, ikon, judul, dan deskripsi tersusun vertikal serta deskripsi ikut bold.
+- Implementation pass: specificity diperbaiki, margin dinormalisasi, dan font-weight container dikembalikan ke normal.
 - Post-fix evidence: capture pembanding terblokir karena browser tidak tersedia.
 
 final result: blocked

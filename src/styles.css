@@ -2351,10 +2351,10 @@ td strong {
 .mode-cards i svg {
   width: 12px;
 }
-.exam-policy-toggle {
+.form-card > label.exam-policy-toggle {
   width: 100%;
   min-height: 82px;
-  margin-top: 16px;
+  margin: 16px 0 0;
   padding: 15px 17px;
   display: flex;
   align-items: center;
@@ -2363,6 +2363,7 @@ td strong {
   border-radius: 12px;
   background: #f8fbfa;
   cursor: pointer;
+  font-weight: 400;
 }
 .exam-policy-toggle > input {
   width: 18px;
