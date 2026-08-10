@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { getSession, type AuthRole } from "../../lib/session";
+import { type AuthRole, useSession } from "../../lib/session";
 
 export function RequireAuth({
   role,
@@ -10,7 +10,7 @@ export function RequireAuth({
   children: ReactNode;
 }) {
   const location = useLocation();
-  const session = getSession();
+  const session = useSession();
   const matches =
     session &&
     (role === "student"

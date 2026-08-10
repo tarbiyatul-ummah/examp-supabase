@@ -20,7 +20,7 @@ function jwtPayload(token: string): { sub?: string; role?: AuthRole } {
 
 export const authRepository = {
   session: getSession,
-  async loginAdmin(login: string, password: string, remember = false) {
+  async loginAdmin(login: string, password: string) {
     const { data: tokens } = await envelope<TokenPair>(
       "/v1/admin/auth/login",
       { method: "POST", body: JSON.stringify({ login, password }) },
@@ -36,7 +36,7 @@ export const authRepository = {
       role: role === "super_admin" ? "Super Admin" : "Administrator",
     };
     clearRequestCache();
-    saveSession({ role, tokens, profile }, remember);
+    saveSession({ role, tokens, profile });
     return profile;
   },
   async loginStudent(code: string) {

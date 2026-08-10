@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { ApiStudent, TokenPair } from "../domain/api";
 import type { UserProfile } from "../domain/models";
 
@@ -13,27 +14,30 @@ export type AuthSession = {
 const SESSION_KEY = "ruanguji.session";
 
 function storageForSession() {
-  return localStorage.getItem(SESSION_KEY) ? localStorage : sessionStorage;
+  return localStorage;
 }
 
 export function getSession(): AuthSession | null {
-  const raw =
-    localStorage.getItem(SESSION_KEY) ?? sessionStorage.getItem(SESSION_KEY);
+  const persistent = localStorage.getItem(SESSION_KEY);
+  const transient = sessionStorage.getItem(SESSION_KEY);
+  const raw = persistent ?? transient;
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as AuthSession;
+    const session = JSON.parse(raw) as AuthSession;
+    if (!persistent && transient) {
+      localStorage.setItem(SESSION_KEY, transient);
+      sessionStorage.removeItem(SESSION_KEY);
+    }
+    return session;
   } catch {
     clearSession();
     return null;
   }
 }
 
-export function saveSession(session: AuthSession, remember = false) {
+export function saveSession(session: AuthSession) {
   clearSession();
-  (remember ? localStorage : sessionStorage).setItem(
-    SESSION_KEY,
-    JSON.stringify(session),
-  );
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   window.dispatchEvent(new Event("ruanguji:session"));
 }
 
@@ -48,4 +52,20 @@ export function clearSession() {
   localStorage.removeItem(SESSION_KEY);
   sessionStorage.removeItem(SESSION_KEY);
   window.dispatchEvent(new Event("ruanguji:session"));
+}
+
+export function useSession() {
+  const [session, setSession] = useState<AuthSession | null>(() => getSession());
+
+  useEffect(() => {
+    const refresh = () => setSession(getSession());
+    window.addEventListener("ruanguji:session", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("ruanguji:session", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+
+  return session;
 }

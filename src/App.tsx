@@ -1,6 +1,7 @@
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { Brand } from "./components/ui";
 import { RequireAuth } from "./components/auth/RequireAuth";
+import { useSession } from "./lib/session";
 import { AdminLoginPage, ParticipantLoginPage } from "./features/auth";
 import { DashboardPage } from "./features/admin/dashboard/DashboardPage";
 import {
@@ -36,13 +37,24 @@ function NotFoundPage() {
   );
 }
 
+function LoginEntry({ children }: { children: React.ReactNode }) {
+  const session = useSession();
+  if (session?.role === "student") {
+    return <Navigate to="/student" replace />;
+  }
+  if (session && ["admin", "super_admin"].includes(session.role)) {
+    return <Navigate to="/admin" replace />;
+  }
+  return children;
+}
+
 export default function App() {
   const admin = (element: React.ReactNode) => <RequireAuth role="admin">{element}</RequireAuth>;
   const student = (element: React.ReactNode) => <RequireAuth role="student">{element}</RequireAuth>;
   return (
     <Routes>
-      <Route path="/" element={<ParticipantLoginPage />} />
-      <Route path="/admin/login" element={<AdminLoginPage />} />
+      <Route path="/" element={<LoginEntry><ParticipantLoginPage /></LoginEntry>} />
+      <Route path="/admin/login" element={<LoginEntry><AdminLoginPage /></LoginEntry>} />
       <Route path="/admin" element={admin(<DashboardPage />)} />
       <Route path="/admin/students" element={admin(<StudentsPage />)} />
       <Route path="/admin/exams" element={admin(<ExamsPage />)} />
