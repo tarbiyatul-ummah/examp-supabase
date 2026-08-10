@@ -7,13 +7,99 @@ import {
   ListChecks,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import resultLoadingAnimation from "../../../assets/result-loading.json";
 import { StudentHeader } from "../../../components/layout";
 import { documentText } from "../../../repositories/mappers";
 import type { ApiAttempt } from "../../../domain/api";
 import type { Exam } from "../../../domain/models";
 import { authRepository, examRepository } from "../../../repositories";
+
+const Lottie = lazy(() => import("lottie-react"));
+
+const SCORE_RADIUS = 52;
+const SCORE_CIRCUMFERENCE = 2 * Math.PI * SCORE_RADIUS;
+
+function AnimatedScoreRing({ score }: { score: number }) {
+  const target = Math.min(100, Math.max(0, score));
+  const [displayedScore, setDisplayedScore] = useState(0);
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setDisplayedScore(target);
+      return;
+    }
+
+    setDisplayedScore(0);
+    let animationFrame = 0;
+    let startedAt: number | null = null;
+    const animate = (timestamp: number) => {
+      startedAt ??= timestamp;
+      const progress = Math.min(1, (timestamp - startedAt) / 1400);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayedScore(target * eased);
+      if (progress < 1) animationFrame = requestAnimationFrame(animate);
+    };
+    animationFrame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [target]);
+
+  const label = Number.isInteger(target)
+    ? String(Math.round(displayedScore))
+    : displayedScore.toFixed(2);
+  const dashOffset = SCORE_CIRCUMFERENCE * (1 - displayedScore / 100);
+
+  return (
+    <div
+      className="score-ring"
+      role="meter"
+      aria-label={`Nilai ${score} dari 100`}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={score}
+    >
+      <svg viewBox="0 0 120 120" aria-hidden="true">
+        <circle cx="60" cy="60" r={SCORE_RADIUS} />
+        <circle
+          className="score"
+          cx="60"
+          cy="60"
+          r={SCORE_RADIUS}
+          style={{
+            strokeDasharray: SCORE_CIRCUMFERENCE,
+            strokeDashoffset: dashOffset,
+          }}
+        />
+      </svg>
+      <div>
+        <strong>{label}</strong>
+        <span>/ 100</span>
+      </div>
+    </div>
+  );
+}
+
+function ResultLoadingState() {
+  const reduceMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+  return (
+    <main className="result-content result-loading-state" aria-live="polite">
+      <div className="result-loading-animation" aria-hidden="true">
+        <Suspense fallback={<span className="result-loading-fallback" />}>
+          <Lottie
+            animationData={resultLoadingAnimation}
+            autoplay={!reduceMotion}
+            loop={!reduceMotion}
+          />
+        </Suspense>
+      </div>
+      <h1>Menyiapkan hasil ujianmu</h1>
+      <p>Nilai dan detail jawaban sedang diambil dari server.</p>
+    </main>
+  );
+}
 
 export function ResultPage() {
   const { id } = useParams();
@@ -53,15 +139,20 @@ export function ResultPage() {
     return (
       <div className="result-page">
         <StudentHeader minimal />
-        <main className="result-content">
-          <p>Memuat hasil...</p>
-        </main>
+        <ResultLoadingState />
       </div>
     );
   const released = typeof result.score === "number";
   const hasAnswer = (answer: NonNullable<ApiAttempt["answers"]>[number]) =>
     Boolean(answer.selectedOptionId || answer.textRaw?.trim());
-  const answered = (result.answers || []).filter(hasAnswer).length;
+  const answers = result.answers || [];
+  const answered = answers.filter(hasAnswer).length;
+  const correct = answers.filter(
+    (answer) => hasAnswer(answer) && answer.verdict === "correct",
+  ).length;
+  const incorrect = answers.filter(
+    (answer) => hasAnswer(answer) && answer.verdict === "incorrect",
+  ).length;
   const total = result.questions?.length || answered;
   const duration = Math.max(0, result.activeElapsedSeconds);
   const durationText = `${Math.floor(duration / 60)}m ${duration % 60}d`;
@@ -82,16 +173,7 @@ export function ResultPage() {
           <small>{exam?.title || "Ujian"}</small>
           {released ? (
             <>
-              <div className="score-ring">
-                <svg viewBox="0 0 120 120">
-                  <circle cx="60" cy="60" r="52" />
-                  <circle className="score" cx="60" cy="60" r="52" />
-                </svg>
-                <div>
-                  <strong>{result.score}</strong>
-                  <span>/ 100</span>
-                </div>
-              </div>
+              <AnimatedScoreRing score={result.score!} />
               <span className="score-message">Nilai dihitung oleh server.</span>
             </>
           ) : (
@@ -100,16 +182,39 @@ export function ResultPage() {
             </span>
           )}
         </section>
-        <section className="result-summary">
-          <div>
-            <span className="green">
-              <Check />
-            </span>
-            <p>
-              <strong>{answered}</strong>
-              <small>Sudah dijawab</small>
-            </p>
-          </div>
+        <section className={`result-summary ${released ? "released" : ""}`}>
+          {released ? (
+            <>
+              <div>
+                <span className="green">
+                  <Check />
+                </span>
+                <p>
+                  <strong>{correct}</strong>
+                  <small>Jawaban benar</small>
+                </p>
+              </div>
+              <div>
+                <span className="orange">
+                  <X />
+                </span>
+                <p>
+                  <strong>{incorrect}</strong>
+                  <small>Jawaban salah</small>
+                </p>
+              </div>
+            </>
+          ) : (
+            <div>
+              <span className="green">
+                <Check />
+              </span>
+              <p>
+                <strong>{answered}</strong>
+                <small>Sudah dijawab</small>
+              </p>
+            </div>
+          )}
           <div>
             <span className="gray">
               <Circle />
