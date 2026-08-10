@@ -1111,6 +1111,104 @@ async function handle(request: Request) {
     return json(request, (await examsWithCounts([exam]))[0]);
   }
 
+  if (match && method === "DELETE") {
+    const auth = await actor(request, ["admin", "super_admin"]);
+    const paths = dataOrThrow<{ questionMedia?: string[]; exports?: string[] }>(
+      await auth.client.rpc("delete_exam", { p_exam_id: match[1] }),
+    );
+    if (paths.questionMedia?.length) {
+      const removal = await service.storage
+        .from("question-media")
+        .remove(paths.questionMedia);
+      if (removal.error) console.error("Gagal membersihkan media ujian", removal.error);
+    }
+    if (paths.exports?.length) {
+      const removal = await service.storage.from("exports").remove(paths.exports);
+      if (removal.error) console.error("Gagal membersihkan ekspor ujian", removal.error);
+    }
+    return json(request, { deleted: true });
+  }
+
+  match = path.match(/^\/v1\/admin\/exams\/([^/]+)\/editor$/);
+  if (match && method === "GET") {
+    await actor(request, ["admin", "super_admin"]);
+    const exam = dataOrThrow<any>(
+      await service.from("exams").select("*").eq("id", match[1]).maybeSingle(),
+    );
+    if (!exam) throw new HttpError(404, "not_found", "Ujian tidak ditemukan.");
+    const versions = dataOrThrow<any[]>(
+      await service
+        .from("exam_versions")
+        .select("id,status,version")
+        .eq("exam_id", exam.id)
+        .order("version", { ascending: false }),
+    );
+    const version = versions.find((item) => item.status === "draft") ??
+      versions.find((item) => item.status === "published" && item.version === exam.current_version) ??
+      versions[0];
+    const questionRows = version
+      ? dataOrThrow<any[]>(
+          await service
+            .from("questions")
+            .select("*")
+            .eq("exam_version_id", version.id)
+            .order("position"),
+        )
+      : [];
+    const questionIds = questionRows.map((question) => question.id);
+    const options = questionIds.length
+      ? dataOrThrow<any[]>(
+          await service
+            .from("question_options")
+            .select("*")
+            .in("question_id", questionIds)
+            .order("position"),
+        )
+      : [];
+    const keys = questionIds.length
+      ? dataOrThrow<any[]>(
+          await service
+            .from("question_option_keys")
+            .select("question_id,correct_option_id")
+            .in("question_id", questionIds),
+        )
+      : [];
+    const accepted = questionIds.length
+      ? dataOrThrow<any[]>(
+          await service
+            .from("accepted_answers")
+            .select("id,question_id,raw_answer")
+            .in("question_id", questionIds),
+        )
+      : [];
+    const assignments = dataOrThrow<any[]>(
+      await service
+        .from("exam_assignments")
+        .select("student_id")
+        .eq("exam_id", exam.id)
+        .is("revoked_at", null),
+    );
+    const questions = await Promise.all(questionRows.map(async (question) => {
+      const key = keys.find((item) => item.question_id === question.id);
+      return {
+        ...mapQuestion(
+          { ...question, content_doc: await signContentMedia(question.content_doc, 3600) },
+          exam.id,
+          options.filter((option) => option.question_id === question.id),
+          key?.correct_option_id,
+        ),
+        acceptedAnswers: accepted
+          .filter((answer) => answer.question_id === question.id)
+          .map((answer) => ({ id: answer.id, raw: answer.raw_answer })),
+      };
+    }));
+    return json(request, {
+      exam: (await examsWithCounts([exam]))[0],
+      questions,
+      assignedStudentIds: assignments.map((item) => item.student_id),
+    });
+  }
+
   match = path.match(/^\/v1\/admin\/exams\/([^/]+)\/questions$/);
   const mediaMatch = path.match(/^\/v1\/admin\/exams\/([^/]+)\/media$/);
   if (mediaMatch && method === "POST") {
@@ -1297,6 +1395,19 @@ async function handle(request: Request) {
     );
   }
 
+  if (match && method === "PUT") {
+    const auth = await actor(request, ["admin", "super_admin"]);
+    const input = await body(request);
+    const questions = Array.isArray(input.questions) ? input.questions : [];
+    const saved = dataOrThrow<number>(
+      await auth.client.rpc("replace_exam_draft_questions", {
+        p_exam_id: match[1],
+        p_questions: questions,
+      }),
+    );
+    return json(request, { saved });
+  }
+
   match = path.match(/^\/v1\/admin\/exams\/([^/]+)\/publish$/);
   if (match && method === "POST") {
     const auth = await actor(request, ["admin", "super_admin"]);
@@ -1341,6 +1452,23 @@ async function handle(request: Request) {
         await auth.client.from("exam_assignments").insert(inserts),
       );
     return json(request, { assigned: inserts.length });
+  }
+
+  if (match && method === "PUT") {
+    const auth = await actor(request, ["admin", "super_admin"]);
+    const input = await body(request);
+    const ids = [
+      ...new Set(
+        (Array.isArray(input.studentIds) ? input.studentIds : []).map(String),
+      ),
+    ];
+    const result = dataOrThrow<{ assigned: number; revoked: number }>(
+      await auth.client.rpc("replace_exam_assignments", {
+        p_exam_id: match[1],
+        p_student_ids: ids,
+      }),
+    );
+    return json(request, result);
   }
 
   if (path === "/v1/student/exams" && method === "GET") {

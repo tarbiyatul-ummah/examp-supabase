@@ -8,22 +8,31 @@ import {
   SlidersHorizontal,
   Sparkles,
   ClipboardCheck,
+  AlertTriangle,
+  Pencil,
+  Trash2,
+  X,
   Users,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { AdminShell } from "../../../components/layout";
-import { PageToolbar, StatusPill } from "../../../components/ui";
+import { PageToolbar, StatusPill, Toast, ToastMessage } from "../../../components/ui";
 import type { Exam, ExamStatus } from "../../../domain/models";
 import { ApiError } from "../../../lib/api";
 import { examRepository } from "../../../repositories";
 
 export function ExamsPage() {
+  const navigate = useNavigate();
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeStatus, setActiveStatus] = useState<"Semua" | ExamStatus>("Semua");
   const [statusFilterOpen, setStatusFilterOpen] = useState(false);
   const [error, setError] = useState("");
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Exam | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [toast, setToast] = useState<Toast | null>(null);
   useEffect(() => {
     examRepository
       .list()
@@ -31,6 +40,42 @@ export function ExamsPage() {
       .catch((cause) => setError(cause instanceof ApiError ? cause.message : "Gagal memuat daftar ujian"))
       .finally(() => setLoading(false));
   }, []);
+  useEffect(() => {
+    if (!openMenuId) return;
+    const close = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement).closest("[data-exam-menu]"))
+        setOpenMenuId(null);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenMenuId(null);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [openMenuId]);
+
+  const deleteExam = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await examRepository.delete(String(deleteTarget.id));
+      setExams((items) => items.filter((exam) => exam.id !== deleteTarget.id));
+      setToast({ message: `Ujian “${deleteTarget.title}” berhasil dihapus.` });
+      setDeleteTarget(null);
+    } catch (cause) {
+      setDeleteTarget(null);
+      setToast({
+        kind: "error",
+        message: cause instanceof ApiError ? cause.message : "Gagal menghapus ujian.",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
   const summary = useMemo(
     () => ({
       total: exams.length,
@@ -68,6 +113,24 @@ export function ExamsPage() {
         </Link>
       }
     >
+      {toast && <ToastMessage toast={toast} onClose={() => setToast(null)} />}
+      {deleteTarget && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal-card small" role="dialog" aria-modal="true" aria-labelledby="delete-exam-title">
+            <div className="modal-header">
+              <div><span className="danger-modal-icon compact"><AlertTriangle /></span><div><h2 id="delete-exam-title">Hapus ujian?</h2><p>Tindakan ini tidak dapat dibatalkan.</p></div></div>
+              <button type="button" className="icon-button" aria-label="Tutup" onClick={() => setDeleteTarget(null)}><X /></button>
+            </div>
+            <div className="modal-body centered-modal-copy">
+              <p>Ujian <strong>{deleteTarget.title}</strong>, soal, dan assignment-nya akan dihapus permanen. Ujian yang sudah memiliki attempt tidak dapat dihapus.</p>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="button secondary" disabled={deleting} onClick={() => setDeleteTarget(null)}>Batal</button>
+              <button type="button" className="button danger" disabled={deleting} onClick={() => void deleteExam()}><Trash2 /> {deleting ? "Menghapus..." : "Hapus ujian"}</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="exam-overview-grid">
         <div className="overview-copy">
           <span>SEMUA UJIAN</span>
@@ -114,7 +177,7 @@ export function ExamsPage() {
             <p>{search || activeStatus !== "Semua" ? "Tidak ada ujian yang sesuai filter." : "Belum ada ujian. Buat ujian pertama untuk memulai."}</p>
           )}
           {filtered.map((exam) => (
-            <article className="exam-card" key={exam.id}>
+            <article className={`exam-card ${openMenuId === String(exam.id) ? "menu-open" : ""}`} key={exam.id}>
               <div className="exam-card-top">
                 <span
                   className="subject-icon large"
@@ -123,9 +186,17 @@ export function ExamsPage() {
                   {exam.subject.slice(0, 2).toUpperCase()}
                 </span>
                 <StatusPill>{exam.status}</StatusPill>
-                <button className="icon-button">
-                  <MoreHorizontal />
-                </button>
+                <div className="row-actions exam-card-actions" data-exam-menu>
+                  <button type="button" className="icon-button" aria-label={`Aksi untuk ${exam.title}`} aria-expanded={openMenuId === String(exam.id)} onClick={() => setOpenMenuId((current) => current === String(exam.id) ? null : String(exam.id))}>
+                    <MoreHorizontal />
+                  </button>
+                  {openMenuId === String(exam.id) && (
+                    <div className="row-action-menu">
+                      <button type="button" onClick={() => { setOpenMenuId(null); navigate(`/admin/exams/${exam.id}/edit`); }}><Pencil /> Edit ujian</button>
+                      <button type="button" className="danger-action" onClick={() => { setOpenMenuId(null); setDeleteTarget(exam); }}><Trash2 /> Hapus ujian</button>
+                    </div>
+                  )}
+                </div>
               </div>
               <p className="exam-subject">{exam.subject.toUpperCase()}</p>
               <h3>{exam.title}</h3>

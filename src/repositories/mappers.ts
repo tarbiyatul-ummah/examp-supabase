@@ -68,6 +68,58 @@ export function htmlText(html: string): string {
 
 type DocumentNode = Record<string, unknown>;
 
+const escapeHtml = (value: unknown) =>
+  String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+
+export function documentImages(value: unknown): ApiMediaAsset[] {
+  if (!value || typeof value !== "object") return [];
+  const node = value as Record<string, unknown>;
+  const own = documentImage(node);
+  if (node.type === "image" && own) return [own];
+  return Array.isArray(node.content)
+    ? node.content.flatMap((child) => documentImages(child))
+    : [];
+}
+
+export function documentHtml(
+  value: unknown,
+  imageIds: ReadonlyMap<string, string> = new Map(),
+): string {
+  if (!value || typeof value !== "object") return "";
+  const node = value as Record<string, unknown>;
+  const children = () =>
+    Array.isArray(node.content)
+      ? node.content.map((child) => documentHtml(child, imageIds)).join("")
+      : "";
+  if (node.type === "doc") return children();
+  if (node.type === "text") {
+    let result = escapeHtml(node.text);
+    const marks = Array.isArray(node.marks) ? node.marks : [];
+    for (const mark of marks as Array<Record<string, unknown>>) {
+      if (mark.type === "bold") result = `<strong>${result}</strong>`;
+      if (mark.type === "italic") result = `<em>${result}</em>`;
+      if (mark.type === "underline") result = `<u>${result}</u>`;
+    }
+    return result;
+  }
+  if (node.type === "hardBreak") return "<br>";
+  if (node.type === "paragraph") return `<p>${children() || "<br>"}</p>`;
+  if (node.type === "bulletList") return `<ul>${children()}</ul>`;
+  if (node.type === "orderedList") return `<ol>${children()}</ol>`;
+  if (node.type === "listItem") return `<li>${children()}</li>`;
+  if (node.type === "image") {
+    const image = documentImage(node);
+    if (!image) return "";
+    const id = imageIds.get(image.objectPath) || crypto.randomUUID();
+    return `<figure class="wysiwyg-image" data-question-image-id="${escapeHtml(id)}" contenteditable="false"><img src="${escapeHtml(image.url || "")}" alt="${escapeHtml(image.altText)}"><div class="wysiwyg-image-controls"><input data-image-alt="${escapeHtml(id)}" value="${escapeHtml(image.altText)}" maxlength="500" placeholder="Teks alternatif gambar" aria-label="Teks alternatif gambar"><button type="button" data-remove-image="${escapeHtml(id)}" aria-label="Hapus gambar"><span aria-hidden="true">Hapus</span></button></div></figure>`;
+  }
+  return children();
+}
+
 function inlineDocumentNodes(
   node: Node,
   inheritedMarks: Array<{ type: string }> = [],

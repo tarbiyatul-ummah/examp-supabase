@@ -76,6 +76,13 @@ export type ApiQuestion = {
   position: number;
   shuffleOptions: boolean;
   options?: ApiQuestionOption[];
+  acceptedAnswers?: Array<{ id: string; raw: string }>;
+};
+
+export type ApiExamEditor = {
+  exam: ApiExam;
+  questions: ApiQuestion[];
+  assignedStudentIds: string[];
 };
 
 export type ApiAnswer = {

@@ -7,7 +7,7 @@ export { QuestionContent } from './QuestionContent'
 export { RichTextEditor } from './RichTextEditor'
 export type { RichTextDraftImage } from './RichTextEditor'
 
-export type Toast = { message: string; kind?: 'success' | 'info' }
+export type Toast = { message: string; kind?: 'success' | 'info' | 'error' }
 
 export function Brand({ light = false, to }: { light?: boolean; to?: string }) {
   const session = getSession()

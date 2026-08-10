@@ -3,6 +3,7 @@ import type {
   ApiAttempt,
   ApiAttemptHistory,
   ApiExam,
+  ApiExamEditor,
   ApiLeaderboardSnapshot,
   ApiMediaAsset,
   ApiMonitoringRow,
@@ -58,6 +59,26 @@ export const examRepository = {
     invalidateCachedRequests(EXAM_LISTS, STUDENT_EXAMS);
     return data;
   },
+  async editor(id: string) {
+    const { data } = await envelope<ApiExamEditor>(
+      `/v1/admin/exams/${id}/editor`,
+    );
+    return data;
+  },
+  async replaceQuestions(examId: string, questions: Record<string, unknown>[]) {
+    const { data } = await envelope<{ saved: number }>(
+      `/v1/admin/exams/${examId}/questions`,
+      { method: "PUT", body: JSON.stringify({ questions }) },
+    );
+    invalidateCachedRequests(EXAM_LISTS, STUDENT_EXAMS);
+    return data;
+  },
+  async delete(examId: string) {
+    await envelope<{ deleted: true }>(`/v1/admin/exams/${examId}`, {
+      method: "DELETE",
+    });
+    invalidateCachedRequests(EXAM_LISTS, STUDENT_EXAMS, STUDENT_LISTS, LEADERBOARDS);
+  },
   async addQuestion(examId: string, input: Record<string, unknown>) {
     const { data } = await envelope<ApiQuestion>(
       `/v1/admin/exams/${examId}/questions`,
@@ -95,6 +116,16 @@ export const examRepository = {
       `/v1/admin/exams/${examId}/assignments`,
       {
         method: "POST",
+        body: JSON.stringify({ studentIds: studentIds.map(String) }),
+      },
+    );
+    invalidateCachedRequests(EXAM_LISTS, STUDENT_EXAMS, STUDENT_LISTS);
+  },
+  async replaceAssignments(examId: string, studentIds: Array<string | number>) {
+    await envelope<{ assigned: number; revoked: number }>(
+      `/v1/admin/exams/${examId}/assignments`,
+      {
+        method: "PUT",
         body: JSON.stringify({ studentIds: studentIds.map(String) }),
       },
     );

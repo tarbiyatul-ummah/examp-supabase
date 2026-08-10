@@ -244,6 +244,12 @@ input[type="checkbox"] {
 .toast.info svg {
   color: #ffd28a;
 }
+.toast.error {
+  background: #7d2929;
+}
+.toast.error svg {
+  color: #ffd1d1;
+}
 @keyframes toast-in {
   from {
     opacity: 0;
@@ -1975,8 +1981,43 @@ td strong {
   border: 1px solid #e0e8e6;
   border-radius: 13px;
   padding: 16px 16px 0;
-  overflow: hidden;
+  overflow: visible;
   transition: 0.18s;
+}
+.exam-card.menu-open {
+  position: relative;
+  z-index: 10;
+}
+.exam-card-actions .row-action-menu {
+  top: calc(100% + 6px);
+}
+.exam-card-actions .row-action-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.exam-card-actions .row-action-menu button svg {
+  width: 16px;
+  height: 16px;
+}
+.exam-card-actions .row-action-menu .danger-action {
+  color: #c54747;
+}
+.exam-card-actions .row-action-menu .danger-action:hover {
+  color: #a72f2f;
+  background: #fff0f0;
+}
+.danger-modal-icon.compact {
+  width: 42px;
+  height: 42px;
+  margin: 0;
+  border-radius: 12px;
+  flex: 0 0 auto;
+}
+.editor-loading {
+  padding: 28px;
+  color: var(--muted);
+  text-align: center;
 }
 .exam-card:hover {
   transform: translateY(-2px);

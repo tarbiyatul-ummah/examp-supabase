@@ -17,7 +17,7 @@ import {
 
 export type RichTextDraftImage = {
   id: string;
-  file: File;
+  file?: File;
   previewUrl: string;
   altText: string;
   width?: number;

@@ -32,6 +32,8 @@ import type {
 import { ApiError } from "../../../lib/api";
 import { examRepository, studentRepository } from "../../../repositories";
 import {
+  documentHtml,
+  documentImages,
   documentText,
   htmlText,
   richTextDocument,
@@ -74,6 +76,13 @@ const typeMap: Record<QuestionType, string> = {
   "Isian panjang": "long_text",
 };
 
+const questionTypeMap: Record<string, QuestionType> = {
+  multiple_choice: "Pilihan ganda",
+  numeric: "Isian angka",
+  short_text: "Isian pendek",
+  long_text: "Isian panjang",
+};
+
 export function ExamEditorPage() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -91,7 +100,6 @@ export function ExamEditorPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [selected, setSelected] = useState<EntityId[]>([]);
   const [serverExamId, setServerExamId] = useState(id || "");
-  const uploaded = useRef(new Set<string>());
   const uploadedMedia = useRef(
     new Map<
       string,
@@ -103,6 +111,7 @@ export function ExamEditorPage() {
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
   const [error, setError] = useState("");
+  const [editorLoading, setEditorLoading] = useState(Boolean(id));
 
   const availableGrades = gradesForLevel[level];
   const active =
@@ -139,22 +148,58 @@ export function ExamEditorPage() {
 
   useEffect(() => {
     if (!id) return;
-    examRepository.listRaw().then((items) => {
-      const exam = items.find((item) => item.id === id);
-      if (!exam) return;
-      const nextLevel = exam.targetLevel || "SMP";
-      setName(exam.name);
-      setDescription(documentText(exam.descriptionDoc));
-      setDuration(Math.round(exam.durationSeconds / 60));
-      setLevel(nextLevel);
-      setGrades(
-        exam.targetGrades.length
-          ? [...exam.targetGrades].sort((a, b) => a - b)
-          : [gradesForLevel[nextLevel][0]],
-      );
-      setMode(exam.gradingMode === "manual_review" ? "manual" : "instant");
-      setAllowReattempt(exam.allowReattempt);
-    });
+    examRepository.editor(id)
+      .then(({ exam, questions: savedQuestions, assignedStudentIds }) => {
+        const nextLevel = exam.targetLevel || "SMP";
+        setName(exam.name);
+        setDescription(documentText(exam.descriptionDoc));
+        setDuration(Math.round(exam.durationSeconds / 60));
+        setLevel(nextLevel);
+        setGrades(
+          exam.targetGrades.length
+            ? [...exam.targetGrades].sort((a, b) => a - b)
+            : [gradesForLevel[nextLevel][0]],
+        );
+        setMode(exam.gradingMode === "manual_review" ? "manual" : "instant");
+        setAllowReattempt(exam.allowReattempt);
+        setSelected(assignedStudentIds);
+        const loaded = savedQuestions.map((question) => {
+          const media = documentImages(question.contentDoc);
+          const imageIds = new Map<string, string>();
+          const images = media.map((item) => {
+            const imageId = crypto.randomUUID();
+            imageIds.set(item.objectPath, imageId);
+            uploadedMedia.current.set(imageId, item);
+            return {
+              id: imageId,
+              previewUrl: item.url || "",
+              altText: item.altText,
+              width: item.width,
+              height: item.height,
+            } satisfies RichTextDraftImage;
+          });
+          const options = [...(question.options || [])].sort(
+            (a, b) => a.position - b.position,
+          );
+          return {
+            clientId: question.id,
+            type: questionTypeMap[question.type],
+            contentHtml: documentHtml(question.contentDoc, imageIds),
+            images,
+            options: options.map((option) => documentText(option.contentDoc)),
+            correct: Math.max(0, options.findIndex((option) => option.isCorrect)),
+            acceptedAnswer: question.acceptedAnswers?.[0]?.raw || "",
+            weight: question.weight,
+          } satisfies DraftQuestion;
+        });
+        const nextQuestions = loaded.length ? loaded : [newQuestion()];
+        setQuestions(nextQuestions);
+        setActiveId(nextQuestions[0].clientId);
+      })
+      .catch((cause) =>
+        setError(cause instanceof ApiError ? cause.message : "Gagal memuat data ujian."),
+      )
+      .finally(() => setEditorLoading(false));
   }, [id]);
 
   useEffect(
@@ -295,8 +340,8 @@ export function ExamEditorPage() {
         setServerExamId(examId);
       }
 
+      const questionPayload: Record<string, unknown>[] = [];
       for (const [index, question] of questions.entries()) {
-        if (uploaded.current.has(question.clientId)) continue;
         const mediaById: Record<
           string,
           Awaited<ReturnType<typeof examRepository.uploadQuestionImage>>
@@ -304,6 +349,7 @@ export function ExamEditorPage() {
         for (const image of question.images) {
           let media = uploadedMedia.current.get(image.id);
           if (!media) {
+            if (!image.file) throw new Error("Berkas gambar soal tidak tersedia.");
             media = await examRepository.uploadQuestionImage(
               examId,
               image.file,
@@ -317,7 +363,7 @@ export function ExamEditorPage() {
           }
           mediaById[image.id] = media;
         }
-        await examRepository.addQuestion(examId, {
+        questionPayload.push({
           type: typeMap[question.type],
           contentDoc: richTextDocument(question.contentHtml, mediaById),
           weight: question.weight,
@@ -338,10 +384,11 @@ export function ExamEditorPage() {
               ? [{ id: "", raw: question.acceptedAnswer.trim() }]
               : [],
         });
-        uploaded.current.add(question.clientId);
       }
 
-      if (selected.length) await examRepository.assign(examId, selected);
+      await examRepository.replaceQuestions(examId, questionPayload);
+
+      await examRepository.replaceAssignments(examId, selected);
       await examRepository.publish(examId);
       setToast({ message: "Ujian berhasil diterbitkan" });
       setTimeout(() => navigate(`/admin/exams/${examId}`), 700);
@@ -361,7 +408,9 @@ export function ExamEditorPage() {
     >
       {toast && <ToastMessage toast={toast} onClose={() => setToast(null)} />}
 
-      <div className="stepper">
+      {editorLoading && <section className="panel editor-loading">Memuat data ujian...</section>}
+
+      {!editorLoading && <><div className="stepper">
         {[
           "Informasi ujian",
           "Susun soal",
@@ -612,8 +661,8 @@ export function ExamEditorPage() {
                     onClick={() => {
                       if (questions.length === 1) return;
                       active.images.forEach((image) => {
-                        URL.revokeObjectURL(image.previewUrl);
-                        previewUrls.current.delete(image.previewUrl);
+                        if (image.file) URL.revokeObjectURL(image.previewUrl);
+                        if (image.file) previewUrls.current.delete(image.previewUrl);
                         uploadedMedia.current.delete(image.id);
                       });
                       const next = questions.filter(
@@ -638,8 +687,8 @@ export function ExamEditorPage() {
                 onToast={(message) => setToast({ message, kind: "info" })}
                 onPreviewCreated={(url) => previewUrls.current.add(url)}
                 onPreviewRemoved={(image) => {
-                  URL.revokeObjectURL(image.previewUrl);
-                  previewUrls.current.delete(image.previewUrl);
+                  if (image.file) URL.revokeObjectURL(image.previewUrl);
+                  if (image.file) previewUrls.current.delete(image.previewUrl);
                   uploadedMedia.current.delete(image.id);
                 }}
               />
@@ -895,7 +944,7 @@ export function ExamEditorPage() {
             </aside>
           </div>
         </section>
-      )}
+      )}</>}
     </AdminShell>
   );
 }
