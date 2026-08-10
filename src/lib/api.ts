@@ -10,6 +10,7 @@ import {
   SUPABASE_PUBLISHABLE_KEY,
   SUPABASE_URL,
 } from "./supabase";
+import { cachedRequest } from "./requestCache";
 
 export const API_BASE_URL = `${SUPABASE_URL}/functions/v1/${SUPABASE_FUNCTION_NAME}`;
 
@@ -123,4 +124,25 @@ export function envelope<T, M = unknown>(
   authenticated = true,
 ) {
   return apiRequest<ApiEnvelope<T, M>>(path, init, authenticated);
+}
+
+export function cachedEnvelope<T, M = unknown>(
+  path: string,
+  options: { ttlMs: number; tags?: readonly string[] },
+  init?: RequestInit,
+  authenticated = true,
+) {
+  const method = (init?.method ?? "GET").toUpperCase();
+  if (method !== "GET") {
+    return envelope<T, M>(path, init, authenticated);
+  }
+  const session = getSession();
+  const scope = authenticated
+    ? `${session?.role ?? "signed-out"}:${session?.profile.id ?? "unknown"}`
+    : "public";
+  return cachedRequest(
+    `${scope}:${path}`,
+    () => envelope<T, M>(path, init, authenticated),
+    options,
+  );
 }

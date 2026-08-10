@@ -1,7 +1,14 @@
 import type { ApiStudent } from "../domain/api";
-import { envelope } from "../lib/api";
+import { cachedEnvelope, envelope } from "../lib/api";
+import {
+  invalidateCachedRequests,
+  REQUEST_CACHE_TAGS,
+} from "../lib/requestCache";
 import { getSession } from "../lib/session";
 import { mapStudent } from "./mappers";
+
+const STUDENT_LIST_CACHE_TTL_MS = 15_000;
+const STUDENT_LISTS = REQUEST_CACHE_TAGS.studentLists;
 
 export type StudentFilters = {
   search?: string;
@@ -25,10 +32,11 @@ function queryString(filters: StudentFilters) {
 export const studentRepository = {
   getCurrentProfile: () => getSession()?.profile || null,
   async list(filters: StudentFilters = {}) {
-    const response = await envelope<
+    const path = `/v1/admin/students${queryString({ limit: 100, ...filters })}`;
+    const response = await cachedEnvelope<
       ApiStudent[],
       { total: number; limit: number; offset: number }
-    >(`/v1/admin/students${queryString({ limit: 100, ...filters })}`);
+    >(path, { ttlMs: STUDENT_LIST_CACHE_TTL_MS, tags: [STUDENT_LISTS] });
     return { students: response.data.map(mapStudent), page: response.meta };
   },
   async create(input: {
@@ -41,6 +49,7 @@ export const studentRepository = {
       "/v1/admin/students",
       { method: "POST", body: JSON.stringify(input) },
     );
+    invalidateCachedRequests(STUDENT_LISTS);
     return {
       student: { ...mapStudent(data.student), code: data.loginCode },
       loginCode: data.loginCode,
@@ -51,6 +60,7 @@ export const studentRepository = {
       method: "PATCH",
       body: JSON.stringify(input),
     });
+    invalidateCachedRequests(STUDENT_LISTS);
     return mapStudent(data);
   },
   async regenerateCode(id: string) {
@@ -58,6 +68,7 @@ export const studentRepository = {
       `/v1/admin/students/${id}/regenerate-code`,
       { method: "POST" },
     );
+    invalidateCachedRequests(STUDENT_LISTS);
     return data.loginCode;
   },
 };

@@ -85,13 +85,20 @@ function json(request: Request, data: unknown, status = 200, meta?: unknown) {
     JSON.stringify(meta === undefined ? { data } : { data, meta }),
     {
       status,
-      headers: { ...corsHeaders(request), "Content-Type": "application/json" },
+      headers: {
+        ...corsHeaders(request),
+        "Content-Type": "application/json",
+        "Cache-Control": "private, no-store",
+      },
     },
   );
 }
 
 function noContent(request: Request) {
-  return new Response(null, { status: 204, headers: corsHeaders(request) });
+  return new Response(null, {
+    status: 204,
+    headers: { ...corsHeaders(request), "Cache-Control": "private, no-store" },
+  });
 }
 
 function errorResponse(request: Request, cause: unknown) {
@@ -110,7 +117,11 @@ function errorResponse(request: Request, cause: unknown) {
     }),
     {
       status: error.status,
-      headers: { ...corsHeaders(request), "Content-Type": "application/json" },
+      headers: {
+        ...corsHeaders(request),
+        "Content-Type": "application/json",
+        "Cache-Control": "private, no-store",
+      },
     },
   );
 }
@@ -446,6 +457,33 @@ async function examsWithCounts(rows: any[]) {
       },
     );
   });
+}
+
+async function leaderboardSnapshot(leaderboard: any) {
+  const entries = dataOrThrow<any[]>(
+    await service
+      .from("leaderboard_entries")
+      .select("*")
+      .eq("leaderboard_id", leaderboard.id)
+      .order("rank"),
+  );
+  return {
+    id: leaderboard.id,
+    examId: leaderboard.exam_id,
+    segmentType: leaderboard.segment_type,
+    ...(leaderboard.segment_value == null
+      ? {}
+      : { segmentValue: leaderboard.segment_value }),
+    version: leaderboard.version,
+    generatedAt: leaderboard.generated_at,
+    entries: entries.map((entry) => ({
+      rank: entry.rank,
+      studentId: entry.student_id,
+      studentName: entry.student_name_snapshot,
+      score: Number(entry.score),
+      durationSeconds: entry.active_duration_seconds,
+    })),
+  };
 }
 
 async function assertAttemptAccess(
@@ -1726,6 +1764,37 @@ async function handle(request: Request) {
   }
 
   match = path.match(/^\/v1\/admin\/exams\/([^/]+)\/leaderboards$/);
+  if (match && method === "GET") {
+    await actor(request, ["admin", "super_admin"]);
+    const segmentType = String(url.searchParams.get("segmentType") ?? "all");
+    const segmentValue = url.searchParams.get("segmentValue")?.trim() || null;
+    if (!["all", "level", "phase", "grade"].includes(segmentType)) {
+      throw new HttpError(
+        400,
+        "validation_error",
+        "Segmen leaderboard tidak valid.",
+      );
+    }
+    if (segmentType !== "all" && !segmentValue) {
+      throw new HttpError(
+        400,
+        "validation_error",
+        "Nilai segmen leaderboard wajib diisi.",
+      );
+    }
+    let query = service
+      .from("leaderboards")
+      .select("*")
+      .eq("exam_id", match[1])
+      .eq("segment_type", segmentType);
+    query = segmentType === "all"
+      ? query.is("segment_value", null)
+      : query.eq("segment_value", segmentValue);
+    const latest = dataOrThrow<any | null>(
+      await query.order("version", { ascending: false }).limit(1).maybeSingle(),
+    );
+    return json(request, latest ? await leaderboardSnapshot(latest) : null);
+  }
   if (match && method === "POST") {
     const auth = await actor(request, ["admin", "super_admin"]);
     const input = await body(request);
@@ -1740,23 +1809,10 @@ async function handle(request: Request) {
         p_segment_value: segmentValue,
       }),
     );
-    const entries = dataOrThrow<any[]>(
-      await service
-        .from("leaderboard_entries")
-        .select("*")
-        .eq("leaderboard_id", leaderboardId)
-        .order("rank"),
+    const leaderboard = dataOrThrow<any>(
+      await service.from("leaderboards").select("*").eq("id", leaderboardId).single(),
     );
-    return json(request, {
-      id: leaderboardId,
-      entries: entries.map((entry) => ({
-        rank: entry.rank,
-        studentId: entry.student_id,
-        studentName: entry.student_name_snapshot,
-        score: Number(entry.score),
-        durationSeconds: entry.active_duration_seconds,
-      })),
-    });
+    return json(request, await leaderboardSnapshot(leaderboard));
   }
 
   throw new HttpError(

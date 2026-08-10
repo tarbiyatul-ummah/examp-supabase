@@ -1,6 +1,7 @@
 import type { ApiStudent, TokenPair } from "../domain/api";
 import type { UserProfile } from "../domain/models";
 import { envelope } from "../lib/api";
+import { clearRequestCache } from "../lib/requestCache";
 import {
   clearSession,
   getSession,
@@ -34,6 +35,7 @@ export const authRepository = {
       shortName: displayName.split(/[._\s-]/)[0] || "Admin",
       role: role === "super_admin" ? "Super Admin" : "Administrator",
     };
+    clearRequestCache();
     saveSession({ role, tokens, profile }, remember);
     return profile;
   },
@@ -53,6 +55,7 @@ export const authRepository = {
       role: "Peserta",
       className: `Kelas ${data.student.grade}`,
     };
+    clearRequestCache();
     saveSession({
       role: "student",
       tokens: data.tokens,
@@ -65,6 +68,7 @@ export const authRepository = {
     try {
       await envelope<void>("/v1/auth/logout", { method: "POST" });
     } finally {
+      clearRequestCache();
       clearSession();
     }
   },

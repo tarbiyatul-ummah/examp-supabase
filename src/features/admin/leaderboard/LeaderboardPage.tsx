@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { AdminShell } from "../../../components/layout";
 import { Avatar, ToastMessage } from "../../../components/ui";
 import type { Toast } from "../../../components/ui";
+import type { ApiLeaderboardSnapshot } from "../../../domain/api";
 import type { Exam, LeaderboardEntry } from "../../../domain/models";
 import { ApiError } from "../../../lib/api";
 import { authRepository, examRepository } from "../../../repositories";
@@ -11,14 +12,27 @@ function duration(seconds: number) {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}d`;
 }
 
+function mapSnapshot(snapshot: ApiLeaderboardSnapshot | null): LeaderboardEntry[] {
+  return (snapshot?.entries ?? []).map((item) => ({
+    rank: item.rank,
+    studentId: item.studentId,
+    name: item.studentName,
+    score: item.score,
+    duration: duration(item.durationSeconds),
+    avatar: "",
+  }));
+}
+
 function Board({
   exam,
   entries,
+  loading,
   fullscreen,
   onClose,
 }: {
   exam: Exam | null;
   entries: LeaderboardEntry[];
+  loading: boolean;
   fullscreen: boolean;
   onClose: () => void;
 }) {
@@ -45,8 +59,8 @@ function Board({
       </div>
       {!entries.length && (
         <div className="leaderboard-empty-board">
-          <strong>{exam ? "Leaderboard belum dibuat" : "Pilih ujian selesai"}</strong>
-          <p>{exam ? "Klik Generate leaderboard untuk mengambil hasil final dari server." : "Leaderboard tersedia setelah ujian selesai dan nilai peserta sudah final."}</p>
+          <strong>{loading ? "Memuat leaderboard..." : exam ? "Leaderboard belum dibuat" : "Pilih ujian selesai"}</strong>
+          <p>{loading ? "Mengambil snapshot terbaru dari server." : exam ? "Klik Generate leaderboard untuk mengambil hasil final dari server." : "Leaderboard tersedia setelah ujian selesai dan nilai peserta sudah final."}</p>
         </div>
       )}
     </div>
@@ -60,6 +74,7 @@ export function LeaderboardPage() {
   const [fullscreen, setFullscreen] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
   const [loadingExams, setLoadingExams] = useState(true);
+  const [loadingSnapshot, setLoadingSnapshot] = useState(false);
   const [loading, setLoading] = useState(false);
   const currentAdmin = authRepository.session()?.profile;
 
@@ -73,21 +88,37 @@ export function LeaderboardPage() {
     }).finally(() => setLoadingExams(false));
   }, []);
 
+  useEffect(() => {
+    if (!examId) {
+      setEntries([]);
+      setLoadingSnapshot(false);
+      return;
+    }
+    let cancelled = false;
+    setEntries([]);
+    setLoadingSnapshot(true);
+    examRepository.latestLeaderboard(examId)
+      .then((snapshot) => {
+        if (!cancelled) setEntries(mapSnapshot(snapshot));
+      })
+      .catch((cause) => {
+        if (!cancelled) {
+          setToast({ message: cause instanceof ApiError ? cause.message : "Gagal memuat leaderboard" });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSnapshot(false);
+      });
+    return () => { cancelled = true; };
+  }, [examId]);
+
   const exam = exams.find((item) => String(item.id) === examId) || null;
   const generate = async () => {
     if (!examId) return;
     setLoading(true);
     try {
-      const raw = await examRepository.generateLeaderboard(examId, "all", "all");
-      const source = (raw.Entries || raw.entries || []) as Array<Record<string, unknown>>;
-      setEntries(source.map((item) => ({
-        rank: Number(item.rank ?? item.Rank),
-        studentId: String(item.studentId ?? item.StudentID),
-        name: String(item.studentName ?? item.StudentName ?? "Peserta"),
-        score: Number(item.score ?? item.Score),
-        duration: duration(Number(item.durationSeconds ?? item.DurationSeconds)),
-        avatar: "",
-      })));
+      const snapshot = await examRepository.generateLeaderboard(examId, "all", "all");
+      setEntries(mapSnapshot(snapshot));
       setToast({ message: "Snapshot leaderboard berhasil dibuat" });
     } catch (cause) {
       setToast({ message: cause instanceof ApiError ? cause.message : "Gagal membuat leaderboard" });
@@ -96,13 +127,15 @@ export function LeaderboardPage() {
     }
   };
 
-  if (fullscreen) return <Board exam={exam} entries={entries} fullscreen onClose={() => setFullscreen(false)} />;
+  const busy = loading || loadingSnapshot;
+
+  if (fullscreen) return <Board exam={exam} entries={entries} loading={false} fullscreen onClose={() => setFullscreen(false)} />;
 
   return (
     <AdminShell
       title="Leaderboard"
       subtitle="Buat dan tampilkan peringkat dari hasil ujian final."
-      action={<button className="button primary desktop-action" disabled={!examId || loading} onClick={() => void generate()}><RefreshCw className={loading ? "spin" : ""} /> {loading ? "Memproses..." : "Generate leaderboard"}</button>}
+      action={<button className="button primary desktop-action" disabled={!examId || busy} onClick={() => void generate()}><RefreshCw className={busy ? "spin" : ""} /> {loading ? "Memproses..." : loadingSnapshot ? "Memuat..." : "Generate leaderboard"}</button>}
     >
       {toast && <ToastMessage toast={toast} onClose={() => setToast(null)} />}
       <section className={`leaderboard-selection panel ${!exam ? "empty" : ""}`}>
@@ -115,21 +148,21 @@ export function LeaderboardPage() {
         {exams.length > 0 && (
           <label className="leaderboard-exam-select">
             <span>Pilih ujian selesai</span>
-            <select value={examId} onChange={(event) => { setExamId(event.target.value); setEntries([]); }}>
+            <select value={examId} onChange={(event) => setExamId(event.target.value)}>
               {exams.map((item) => <option value={String(item.id)} key={item.id}>{item.title}</option>)}
             </select>
           </label>
         )}
       </section>
       <div className="leaderboard-layout">
-        <Board exam={exam} entries={entries} fullscreen={false} onClose={() => {}} />
+        <Board exam={exam} entries={entries} loading={loadingSnapshot} fullscreen={false} onClose={() => {}} />
         <aside className="leaderboard-side">
           <section className="panel">
             <h3>Publikasi</h3>
             <p>Snapshot berisi nilai otomatis yang final atau nilai manual yang sudah diterbitkan oleh {currentAdmin?.name || "Admin"}.</p>
             <button className="button primary full" disabled={!entries.length} onClick={() => setFullscreen(true)}><Eye /> Tampilkan layar penuh</button>
           </section>
-          <button className="button primary mobile-leaderboard-generate" disabled={!examId || loading} onClick={() => void generate()}><RefreshCw className={loading ? "spin" : ""} /> {loading ? "Memproses..." : "Generate leaderboard"}</button>
+          <button className="button primary mobile-leaderboard-generate" disabled={!examId || busy} onClick={() => void generate()}><RefreshCw className={busy ? "spin" : ""} /> {loading ? "Memproses..." : loadingSnapshot ? "Memuat..." : "Generate leaderboard"}</button>
         </aside>
       </div>
     </AdminShell>

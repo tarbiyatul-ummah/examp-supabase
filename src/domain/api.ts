@@ -152,3 +152,21 @@ export type ApiReviewQueueRow = {
   reviewedCount: number;
   questionCount: number;
 };
+
+export type ApiLeaderboardEntry = {
+  rank: number;
+  studentId: string;
+  studentName: string;
+  score: number;
+  durationSeconds: number;
+};
+
+export type ApiLeaderboardSnapshot = {
+  id: string;
+  examId: string;
+  segmentType: "all" | "level" | "phase" | "grade";
+  segmentValue?: string;
+  version: number;
+  generatedAt: string;
+  entries: ApiLeaderboardEntry[];
+};
