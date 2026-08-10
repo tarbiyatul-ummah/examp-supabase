@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { Brand } from "./components/ui";
 import { RequireAuth } from "./components/auth/RequireAuth";
@@ -17,11 +18,30 @@ import {
   DisqualifiedPage,
   ExamAttemptPage,
   ExamOverviewPage,
-  ResultPage,
   SessionConflictPage,
   StudentHomePage,
   WaitingReviewPage,
 } from "./features/student";
+
+const ResultPage = lazy(() =>
+  import("./features/student/result/ResultPage").then((module) => ({
+    default: module.ResultPage,
+  })),
+);
+
+function ResultPageFallback() {
+  return (
+    <div className="result-page">
+      <main
+        className="result-content result-loading-state"
+        aria-live="polite"
+      >
+        <span className="result-loading-fallback" aria-hidden="true" />
+        <p>Menyiapkan halaman hasil...</p>
+      </main>
+    </div>
+  );
+}
 
 function NotFoundPage() {
   return (
@@ -68,7 +88,14 @@ export default function App() {
       <Route path="/student" element={student(<StudentHomePage />)} />
       <Route path="/student/exam/:id" element={student(<ExamOverviewPage />)} />
       <Route path="/student/exam/:id/attempt" element={student(<ExamAttemptPage />)} />
-      <Route path="/student/result/:id" element={student(<ResultPage />)} />
+      <Route
+        path="/student/result/:id"
+        element={student(
+          <Suspense fallback={<ResultPageFallback />}>
+            <ResultPage />
+          </Suspense>,
+        )}
+      />
       <Route
         path="/student/status/waiting-review"
         element={student(<WaitingReviewPage />)}

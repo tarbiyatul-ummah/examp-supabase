@@ -1,5 +1,4 @@
 export { ExamAttemptPage } from './exam/ExamAttemptPage'
 export { ExamOverviewPage } from './exam/ExamOverviewPage'
 export { StudentHomePage } from './home/StudentHomePage'
-export { ResultPage } from './result/ResultPage'
 export { DisqualifiedPage, SessionConflictPage, WaitingReviewPage } from './status/StudentStatusPages'

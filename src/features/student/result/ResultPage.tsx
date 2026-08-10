@@ -7,7 +7,8 @@ import {
   ListChecks,
   X,
 } from "lucide-react";
-import { lazy, Suspense, useEffect, useState } from "react";
+import Lottie from "lottie-react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import resultLoadingAnimation from "../../../assets/result-loading.json";
 import { StudentHeader } from "../../../components/layout";
@@ -15,8 +16,6 @@ import { documentText } from "../../../repositories/mappers";
 import type { ApiAttempt } from "../../../domain/api";
 import type { Exam } from "../../../domain/models";
 import { authRepository, examRepository } from "../../../repositories";
-
-const Lottie = lazy(() => import("lottie-react"));
 
 const SCORE_RADIUS = 52;
 const SCORE_CIRCUMFERENCE = 2 * Math.PI * SCORE_RADIUS;
@@ -87,13 +86,11 @@ function ResultLoadingState() {
   return (
     <main className="result-content result-loading-state" aria-live="polite">
       <div className="result-loading-animation" aria-hidden="true">
-        <Suspense fallback={<span className="result-loading-fallback" />}>
-          <Lottie
-            animationData={resultLoadingAnimation}
-            autoplay={!reduceMotion}
-            loop={!reduceMotion}
-          />
-        </Suspense>
+        <Lottie
+          animationData={resultLoadingAnimation}
+          autoplay={!reduceMotion}
+          loop={!reduceMotion}
+        />
       </div>
       <h1>Menyiapkan hasil ujianmu</h1>
       <p>Nilai dan detail jawaban sedang diambil dari server.</p>
