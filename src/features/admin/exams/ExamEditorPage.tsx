@@ -6,6 +6,8 @@ import {
   ChevronLeft,
   ClipboardCheck,
   FileText,
+  FileSpreadsheet,
+  Download,
   Plus,
   RotateCcw,
   Send,
@@ -30,6 +32,7 @@ import type {
   Student,
 } from "../../../domain/models";
 import { ApiError } from "../../../lib/api";
+import { importExamQuestions } from "../../../lib/examSpreadsheet";
 import { examRepository, studentRepository } from "../../../repositories";
 import {
   documentHtml,
@@ -108,10 +111,13 @@ export function ExamEditorPage() {
   );
   const previewUrls = useRef(new Set<string>());
   const gradeMenuRef = useRef<HTMLDivElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const [publishing, setPublishing] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
   const [error, setError] = useState("");
   const [editorLoading, setEditorLoading] = useState(Boolean(id));
+  const [importing, setImporting] = useState(false);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
 
   const availableGrades = gradesForLevel[level];
   const active =
@@ -222,6 +228,37 @@ export function ExamEditorPage() {
     const question = newQuestion();
     setQuestions((items) => [...items, question]);
     setActiveId(question.clientId);
+  };
+
+  const importQuestions = async (file?: File) => {
+    if (!file) return;
+    setImporting(true);
+    setImportErrors([]);
+    setError("");
+    try {
+      const result = await importExamQuestions(file, mode);
+      if (result.errors.length) {
+        setImportErrors(result.errors);
+        return;
+      }
+      const imported: DraftQuestion[] = result.questions.map((question) => ({
+        clientId: crypto.randomUUID(),
+        ...question,
+        images: [],
+      }));
+      const onlyBlankPlaceholder =
+        questions.length === 1 &&
+        !htmlText(questions[0].contentHtml) &&
+        questions[0].images.length === 0;
+      setQuestions((current) => onlyBlankPlaceholder ? imported : [...current, ...imported]);
+      setActiveId(imported[0].clientId);
+      setToast({ message: `${imported.length} soal berhasil diimpor dari Excel.` });
+    } catch {
+      setImportErrors(["Terjadi kesalahan saat membaca file Excel."]);
+    } finally {
+      setImporting(false);
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
   };
 
   const changeLevel = (nextLevel: AcademicLevel) => {
@@ -588,6 +625,35 @@ export function ExamEditorPage() {
 
       {step === 2 && (
         <>
+          <section className="bulk-import-panel">
+            <div className="bulk-import-copy">
+              <span><FileSpreadsheet /></span>
+              <div><strong>Import soal dari Excel</strong><small>Tambahkan hingga 500 soal sekaligus dari file .xlsx.</small></div>
+            </div>
+            <div className="bulk-import-actions">
+              <a className="button secondary" href="/templates/template-import-soal-ruanguji.xlsx" download>
+                <Download /> Unduh template
+              </a>
+              <button type="button" className="button primary" disabled={importing} onClick={() => importInputRef.current?.click()}>
+                <FileSpreadsheet /> {importing ? "Membaca file..." : "Import Excel"}
+              </button>
+              <input
+                ref={importInputRef}
+                type="file"
+                className="visually-hidden"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={(event) => void importQuestions(event.currentTarget.files?.[0])}
+              />
+            </div>
+          </section>
+          {importErrors.length > 0 && (
+            <div className="import-error-panel" role="alert">
+              <strong>File belum dapat diimpor</strong>
+              <p>Perbaiki data berikut, lalu unggah kembali:</p>
+              <ul>{importErrors.slice(0, 8).map((message) => <li key={message}>{message}</li>)}</ul>
+              {importErrors.length > 8 && <small>Dan {importErrors.length - 8} kesalahan lainnya.</small>}
+            </div>
+          )}
           <div className="question-builder">
             <aside className="question-sidebar">
               <div className="question-sidebar-head">

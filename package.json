@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "generate:exam-template": "node scripts/generate-exam-import-template.mjs",
     "preview": "vite preview",
     "lint": "tsc -b --pretty false"
   },
@@ -15,12 +16,14 @@
     "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "react-router-dom": "latest"
+    "react-router-dom": "latest",
+    "read-excel-file": "^9.3.9"
   },
   "devDependencies": {
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "typescript": "latest",
-    "vite": "latest"
+    "vite": "latest",
+    "write-excel-file": "^4.1.1"
   }
 }

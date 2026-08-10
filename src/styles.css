@@ -2107,6 +2107,64 @@ td strong {
 }
 
 /* Exam builder */
+.bulk-import-panel {
+  margin-bottom: 14px;
+  padding: 15px 17px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid #d8e6e3;
+  border-radius: 14px;
+  background: linear-gradient(110deg, #f5fbfa, #ffffff);
+}
+.bulk-import-copy,
+.bulk-import-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bulk-import-copy > span {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 11px;
+  color: var(--teal);
+  background: #dff1ed;
+}
+.bulk-import-copy > span svg {
+  width: 20px;
+}
+.bulk-import-copy > div {
+  display: grid;
+  gap: 3px;
+}
+.bulk-import-copy small {
+  color: var(--muted);
+}
+.import-error-panel {
+  margin-bottom: 14px;
+  padding: 15px 18px;
+  border: 1px solid #efb6b6;
+  border-radius: 12px;
+  color: #7d2929;
+  background: #fff5f5;
+}
+.import-error-panel p {
+  margin: 4px 0 8px;
+  color: #9a4a4a;
+}
+.import-error-panel ul {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.6;
+}
+.import-error-panel small {
+  display: block;
+  margin-top: 7px;
+}
 .stepper {
   display: flex;
   justify-content: center;
@@ -7875,6 +7933,18 @@ canvas {
   }
   .assignment-sticky-footer .button {
     flex: 1;
+    justify-content: center;
+  }
+  .bulk-import-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .bulk-import-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .bulk-import-actions .button {
+    width: 100%;
     justify-content: center;
   }
 }
