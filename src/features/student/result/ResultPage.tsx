@@ -7,10 +7,8 @@ import {
   ListChecks,
   X,
 } from "lucide-react";
-import lottie from "lottie-web";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import resultLoadingAnimation from "../../../assets/result-loading.json";
 import { StudentHeader } from "../../../components/layout";
 import { documentText } from "../../../repositories/mappers";
 import type { ApiAttempt } from "../../../domain/api";
@@ -19,25 +17,6 @@ import { authRepository, examRepository } from "../../../repositories";
 
 const SCORE_RADIUS = 52;
 const SCORE_CIRCUMFERENCE = 2 * Math.PI * SCORE_RADIUS;
-
-function ResultLoadingAnimation({ reduceMotion }: { reduceMotion: boolean }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const animation = lottie.loadAnimation({
-      container: containerRef.current,
-      renderer: "svg",
-      autoplay: !reduceMotion,
-      loop: !reduceMotion,
-      animationData: structuredClone(resultLoadingAnimation),
-    });
-    if (reduceMotion) animation.goToAndStop(0, true);
-    return () => animation.destroy();
-  }, [reduceMotion]);
-
-  return <div ref={containerRef} className="result-loading-animation" />;
-}
 
 function AnimatedScoreRing({ score }: { score: number }) {
   const target = Math.min(100, Math.max(0, score));
@@ -99,13 +78,10 @@ function AnimatedScoreRing({ score }: { score: number }) {
 }
 
 function ResultLoadingState() {
-  const reduceMotion = window.matchMedia(
-    "(prefers-reduced-motion: reduce)",
-  ).matches;
   return (
     <main className="result-content result-loading-state" aria-live="polite">
-      <div aria-hidden="true">
-        <ResultLoadingAnimation reduceMotion={reduceMotion} />
+      <div className="result-loading-animation" aria-hidden="true">
+        <span className="result-loading-fallback" />
       </div>
       <h1>Menyiapkan hasil ujianmu</h1>
       <p>Nilai dan detail jawaban sedang diambil dari server.</p>
